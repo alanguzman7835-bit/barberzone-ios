@@ -20,6 +20,12 @@ export default function Root({ children }: { children: React.ReactNode }) {
           content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, shrink-to-fit=no"
         />
 
+        {/* Manifiesto e íconos oficiales para Android, PC y iOS */}
+        <link rel="manifest" href="/manifest.json" />
+        <link rel="icon" type="image/png" href="/icon.png" />
+        <link rel="apple-touch-icon" href="/icon.png" />
+        <meta name="theme-color" content="#0A0A0A" />
+
         {/* Etiquetas obligatorias para modo app nativa (PWA) en iPhone / iOS */}
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="mobile-web-app-capable" content="yes" />

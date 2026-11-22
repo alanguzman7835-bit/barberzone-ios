@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "barberzones",
+    "name": "BarberZone",
     "slug": "barberzones",
     "version": "1.0.0",
     "orientation": "default",
@@ -21,6 +21,11 @@
     },
     "web": {
       "output": "single",
+      "display": "standalone",
+      "name": "BarberZone",
+      "shortName": "BarberZone",
+      "backgroundColor": "#208AEF",
+      "themeColor": "#208AEF",
       "favicon": "./assets/images/favicon.png"
     },
     "plugins": [

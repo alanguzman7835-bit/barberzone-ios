@@ -163,12 +163,10 @@ export const CajaScreen: React.FC<{ usuario: UsuarioBz }> = ({ usuario }) => {
   ]);
   const [modalNuevaEsperaAbierto, setModalNuevaEsperaAbierto] = useState(false);
 
-  // Hook listo para conectar la notificación real (Push / WhatsApp / SMS) cuando se configure
   const onNotificarLugarDisponible = (cliente: ClienteEsperaCaja) => {
     const ahora = new Date();
     const horaStr = ahora.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-    // TODO: Conectar aquí envío de notificación Push / WhatsApp al teléfono: cliente.telefono
     setClientesEnEspera((prev) =>
       prev.map((c) =>
         c.id === cliente.id
@@ -182,15 +180,10 @@ export const CajaScreen: React.FC<{ usuario: UsuarioBz }> = ({ usuario }) => {
     setClientesEnEspera((prev) => prev.filter((c) => c.id !== id));
   };
 
-  // null = Pantalla principal con feeds grandes de todos los clientes
-  // string = ID de la cita o 'MOSTRADOR' cuando entras al detalle de un cliente
   const [cuentaAbiertaKey, setCuentaAbiertaKey] = useState<string | null>(null);
-
-  // Guarda las líneas por cliente para que al entrar/salir no se pierda nada
   const [ordenesPorCliente, setOrdenesPorCliente] = useState<Record<string, LineaOrden[]>>({});
   const [propinasPorCliente, setPropinasPorCliente] = useState<Record<string, number>>({});
 
-  // Sincroniza el servicio base de cada cita en su orden si aún no existe
   useEffect(() => {
     setOrdenesPorCliente((prev) => {
       let cambio = false;
@@ -264,9 +257,7 @@ export const CajaScreen: React.FC<{ usuario: UsuarioBz }> = ({ usuario }) => {
     { desc: '10:45 Cobro OLI-000121 · Juan Pérez', monto: '+$250', esGasto: false },
   ]);
 
-  // Modal guiado: Agregar Producto o Servicio -> Elegir -> Confirmar -> ¿Agregar más?
   const [modalAgregarAbierto, setModalAgregarAbierto] = useState(false);
-
   const [pedidoEscaneando, setPedidoEscaneando] = useState<PedidoApartadoRegistro | null>(null);
   const [escanerGlobalAbierto, setEscanerGlobalAbierto] = useState(false);
 
@@ -494,7 +485,6 @@ export const CajaScreen: React.FC<{ usuario: UsuarioBz }> = ({ usuario }) => {
 
       {tabPrincipal === 'COBRO' ? (
         cuentaAbiertaKey === null ? (
-          /* PANTALLA 1: Feeds grandes de clientes + Lista de espera fuera del local */
           <VistaFeedsClientesCaja
             usuario={usuario}
             turnoAbierto={turnoAbierto}
@@ -508,7 +498,6 @@ export const CajaScreen: React.FC<{ usuario: UsuarioBz }> = ({ usuario }) => {
             onIrCorte={() => setSubVista(turnoAbierto ? 'CORTE' : 'APERTURA')}
           />
         ) : (
-          /* PANTALLA 2: Detalle de cuenta del cliente seleccionado */
           <VistaDetalleClienteCaja
             turnoAbierto={turnoAbierto}
             clienteNombre={clienteOrdenNombre}
@@ -546,7 +535,7 @@ export const CajaScreen: React.FC<{ usuario: UsuarioBz }> = ({ usuario }) => {
         />
       )}
 
-      {/* Modal para registrar cliente en espera que salió a dar una vuelta / café */}
+      {/* Modal para registrar cliente en espera */}
       <BzSheet visible={modalNuevaEsperaAbierto} onDismiss={() => setModalNuevaEsperaAbierto(false)}>
         <RegistrarClienteEsperaSheet
           onGuardar={(nuevo) => {
@@ -557,7 +546,7 @@ export const CajaScreen: React.FC<{ usuario: UsuarioBz }> = ({ usuario }) => {
         />
       </BzSheet>
 
-      {/* Modal guiado: Servicio o Producto -> Buscador/Catálogo -> Cantidad -> ¿Agregar más? */}
+      {/* Modal guiado: Servicio o Producto */}
       <BzSheet visible={modalAgregarAbierto} onDismiss={() => setModalAgregarAbierto(false)}>
         <FlujoAgregarConceptoSheet
           clienteNombre={clienteOrdenNombre}
@@ -597,7 +586,7 @@ export const CajaScreen: React.FC<{ usuario: UsuarioBz }> = ({ usuario }) => {
 };
 
 /* ============================================================================
- * PANTALLA 1: FEEDS GRANDES DE CLIENTES EN CAJA + LISTA DE ESPERA CON AVISO
+ * PANTALLA 1: DASHBOARD RECEPCIÓN / CAJA (KPIs + AHORA Y PRÓXIMAS + ESPERA)
  * ========================================================================== */
 
 const VistaFeedsClientesCaja: React.FC<{
@@ -624,38 +613,93 @@ const VistaFeedsClientesCaja: React.FC<{
   onIrCorte,
 }) => {
   const { colors } = useBzTheme();
+  const { citasEquipo, ventasHoy } = useAgenda();
+  const hoy = hoyISO();
+
+  const citasDeHoy = useMemo(
+    () =>
+      citasEquipo
+        .filter((c) => c.fechaISO === hoy)
+        .sort((a, b) => minutosDelDia(a) - minutosDelDia(b)),
+    [citasEquipo, hoy],
+  );
+
+  const terminadasHoy = citasDeHoy.filter((c) => c.estado === 'TERMINADA').length;
+  const porAtenderHoy = citasDeHoy.filter((c) => c.estado !== 'TERMINADA' && c.estado !== 'CANCELADA').length;
+  const listosCobrarCount = clientesEnProceso.filter((c) => c.estado === 'POR_COBRAR').length;
+  const enCorteCount = clientesEnProceso.filter((c) => c.estado === 'EN_SERVICIO').length;
+  const totalCajaTurno = ventasHoy.reduce((acc, v) => acc + v.total, 0);
+
   const extrasMostrador = ordenesPorCliente['MOSTRADOR'] ?? [];
   const totalMostrador = extrasMostrador.reduce((a, l) => a + l.precio * l.cantidad, 0);
 
+  const fechaFormateada = useMemo(() => {
+    const f = new Date().toLocaleDateString('es-MX', {
+      weekday: 'long',
+      day: 'numeric',
+      month: 'long',
+    });
+    return f.charAt(0).toUpperCase() + f.slice(1);
+  }, []);
+
   return (
     <ScrollView
-      contentContainerStyle={{ paddingHorizontal: 20, paddingVertical: 14, gap: 16, paddingBottom: 32 }}
+      contentContainerStyle={{
+        paddingHorizontal: 20,
+        paddingVertical: 16,
+        gap: 16,
+        paddingBottom: 36,
+        maxWidth: 1380,
+        width: '100%',
+        alignSelf: 'center',
+      }}
       showsVerticalScrollIndicator={false}
     >
-      {/* Encabezado limpio */}
-      <Fila>
-        <View style={{ flex: 1 }}>
-          <Titulo texto={`Caja · ${usuario.sucursal}`} />
-          <Text style={{ color: colors.BzMuted, fontSize: 12 }}>
-            Selecciona un cliente para ver su servicio, agregar productos o cobrar
+      {/* Encabezado estilo dashboard */}
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12 }}>
+        <View style={{ flex: 1, minWidth: 220 }}>
+          <Text style={{ color: colors.BzText, fontSize: 24, fontWeight: '700' }}>
+            {fechaFormateada}
+          </Text>
+          <Text style={{ color: colors.BzMuted, fontSize: 13, marginTop: 3 }}>
+            Hola, {usuario.nombre} · Recepción/Cajero · Sucursal {usuario.sucursal}
           </Text>
         </View>
-        <Pressable
-          onPress={onIrCorte}
-          style={{
-            paddingHorizontal: 12,
-            paddingVertical: 8,
-            borderRadius: 10,
-            borderWidth: 1,
-            borderColor: colors.BzBorder,
-            backgroundColor: colors.BzCard,
-          }}
-        >
-          <Text style={{ color: colors.BzText, fontSize: 11, fontWeight: '600' }}>
-            {turnoAbierto ? 'Corte de caja' : 'Abrir turno'}
-          </Text>
-        </Pressable>
-      </Fila>
+
+        <View style={{ flexDirection: 'row', gap: 8 }}>
+          <Pressable
+            onPress={() => onEntrarCliente('MOSTRADOR')}
+            style={{
+              paddingHorizontal: 14,
+              paddingVertical: 9,
+              borderRadius: 10,
+              backgroundColor: colors.BzCard,
+              borderWidth: 1,
+              borderColor: '#E2C46D',
+            }}
+          >
+            <Text style={{ color: '#E2C46D', fontSize: 12, fontWeight: '700' }}>
+              + Mostrador{extrasMostrador.length > 0 ? ` ($${totalMostrador})` : ''}
+            </Text>
+          </Pressable>
+
+          <Pressable
+            onPress={onIrCorte}
+            style={{
+              paddingHorizontal: 14,
+              paddingVertical: 9,
+              borderRadius: 10,
+              borderWidth: 1,
+              borderColor: colors.BzBorder,
+              backgroundColor: colors.BzCard,
+            }}
+          >
+            <Text style={{ color: colors.BzText, fontSize: 12, fontWeight: '600' }}>
+              {turnoAbierto ? 'Corte de caja' : 'Abrir turno'}
+            </Text>
+          </Pressable>
+        </View>
+      </View>
 
       {!turnoAbierto && (
         <Tarjeta padding={14} radius={14} gap={4}>
@@ -668,334 +712,246 @@ const VistaFeedsClientesCaja: React.FC<{
         </Tarjeta>
       )}
 
-      {/* SECCIÓN 1: CLIENTES EN SILLA / POR COBRAR */}
-      <Fila>
-        <Etiqueta texto={`CLIENTES EN ATENCIÓN (${clientesEnProceso.length})`} />
-        <Pressable
-          onPress={() => onEntrarCliente('MOSTRADOR')}
+      {/* 4 TARJETAS KPI */}
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
+        <View style={[styles.kpiBox, { backgroundColor: colors.BzCard, borderColor: colors.BzBorder }]}>
+          <Text style={[styles.kpiNum, { color: colors.BzText }]}>{citasDeHoy.length}</Text>
+          <Text style={[styles.kpiTit, { color: colors.BzMuted }]}>CITAS HOY</Text>
+          <Text style={[styles.kpiSub, { color: colors.BzText }]}>
+            {porAtenderHoy} por atender · {terminadasHoy} terminadas
+          </Text>
+        </View>
+
+        <View style={[styles.kpiBox, { backgroundColor: colors.BzCard, borderColor: colors.BzBorder }]}>
+          <Text style={[styles.kpiNum, { color: colors.BzSuccess }]}>${totalCajaTurno}</Text>
+          <Text style={[styles.kpiTit, { color: colors.BzMuted }]}>CAJA DEL TURNO</Text>
+          <Text style={[styles.kpiSub, { color: colors.BzText }]}>
+            {turnoAbierto ? 'Turno abierto activo' : 'Turno cerrado'}
+          </Text>
+        </View>
+
+        <View style={[styles.kpiBox, { backgroundColor: colors.BzCard, borderColor: colors.BzBorder }]}>
+          <Text style={[styles.kpiNum, { color: '#E2C46D' }]}>{clientesEnProceso.length}</Text>
+          <Text style={[styles.kpiTit, { color: colors.BzMuted }]}>POR COBRAR / EN CORTE</Text>
+          <Text style={[styles.kpiSub, { color: colors.BzText }]}>
+            {listosCobrarCount} listos · {enCorteCount} en corte
+          </Text>
+        </View>
+
+        <View style={[styles.kpiBox, { backgroundColor: colors.BzCard, borderColor: colors.BzBorder }]}>
+          <Text style={[styles.kpiNum, { color: colors.BzDanger }]}>{clientesEnEspera.length}</Text>
+          <Text style={[styles.kpiTit, { color: colors.BzMuted }]}>EN LISTA DE ESPERA</Text>
+          <Text style={[styles.kpiSub, { color: colors.BzText }]}>
+            Clientes esperando turno
+          </Text>
+        </View>
+      </View>
+
+      {/* PANEL PRINCIPAL EN 2 COLUMNAS RESPONSIVAS */}
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 16, alignItems: 'flex-start' }}>
+        {/* COLUMNA IZQUIERDA: AHORA Y PRÓXIMAS */}
+        <View
           style={{
-            paddingHorizontal: 12,
-            paddingVertical: 6,
-            borderRadius: 10,
+            flexGrow: 1.7,
+            flexBasis: 340,
             backgroundColor: colors.BzCard,
-            borderWidth: 1,
             borderColor: colors.BzBorder,
+            borderWidth: 1,
+            borderRadius: 16,
+            padding: 18,
           }}
         >
-          <Text style={{ color: '#E2C46D', fontSize: 12, fontWeight: '700' }}>
-            + Venta mostrador{extrasMostrador.length > 0 ? ` ($${totalMostrador})` : ''}
-          </Text>
-        </Pressable>
-      </Fila>
+          <Fila>
+            <Etiqueta texto={`AHORA Y PRÓXIMAS · ${usuario.sucursal.toUpperCase()}`} />
+            <Text style={{ color: '#E2C46D', fontSize: 12, fontWeight: '600' }}>
+              {citasDeHoy.length} citas hoy
+            </Text>
+          </Fila>
 
-      {clientesEnProceso.length === 0 ? (
-        <Tarjeta padding={20} radius={16} gap={6}>
-          <Text style={{ color: colors.BzText, fontSize: 16, fontWeight: '700' }}>
-            No hay clientes en corte en este momento
-          </Text>
-          <Text style={{ color: colors.BzMuted, fontSize: 13, lineHeight: 19 }}>
-            Cuando un barbero inicie un servicio o lo marque como listo para cobrar, aparecerá aquí en grande.
-          </Text>
-          <View style={{ marginTop: 8 }}>
-            <BotonPrimario
-              texto="+ Iniciar venta de mostrador"
-              height={46}
-              onPress={() => onEntrarCliente('MOSTRADOR')}
-            />
-          </View>
-        </Tarjeta>
-      ) : (
-        <View style={styles.feedsGrid}>
-          {clientesEnProceso.map((cita) => {
-            const listaCobro = cita.estado === 'POR_COBRAR';
-            const lineasCliente = ordenesPorCliente[cita.id] ?? [
-              {
-                id: 1,
-                concepto: cita.servicio,
-                detalle: cita.barberoNombre,
-                tipo: 'Servicio' as const,
-                precio: cita.precio,
-                cantidad: 1,
-              },
-            ];
-            const extrasCount = Math.max(0, lineasCliente.length - 1);
-            const totalAcumulado = lineasCliente.reduce((acc, l) => acc + l.precio * l.cantidad, 0);
-            const iniciales = cita.clienteNombre
-              .split(' ')
-              .slice(0, 2)
-              .map((p) => p[0]?.toUpperCase() ?? '')
-              .join('');
+          {citasDeHoy.length === 0 ? (
+            <Text style={{ color: colors.BzMuted, fontSize: 13, paddingVertical: 16 }}>
+              No hay citas registradas para hoy. Usa "+ Mostrador" para ventas directas.
+            </Text>
+          ) : (
+            <View style={{ marginTop: 8 }}>
+              {citasDeHoy.map((cita, idx) => {
+                const esListoCobrar = cita.estado === 'POR_COBRAR';
+                const esEnCorte = cita.estado === 'EN_SERVICIO';
+                const puedeAbrirCuenta = esListoCobrar || esEnCorte;
 
-            return (
-              <Pressable
-                key={cita.id}
-                onPress={() => onEntrarCliente(cita.id)}
-                style={({ pressed }) => [
-                  styles.feedCardGrande,
-                  {
-                    backgroundColor: colors.BzCard,
-                    borderColor: listaCobro ? colors.BzSuccess : colors.BzBorder,
-                    borderWidth: listaCobro ? 1.5 : 1,
-                  },
-                  pressed && { opacity: 0.92, transform: [{ scale: 0.995 }] },
-                ]}
-              >
-                <Fila>
-                  <View
-                    style={{
-                      paddingHorizontal: 10,
-                      paddingVertical: 4,
-                      borderRadius: 20,
-                      backgroundColor: colors.BzBg,
-                      borderWidth: 1,
-                      borderColor: listaCobro ? colors.BzSuccess : colors.BzWarning,
+                const dotColor = esListoCobrar
+                  ? colors.BzSuccess
+                  : cita.estado === 'TERMINADA'
+                  ? colors.BzMuted
+                  : '#E2C46D';
+
+                const textoPill = esListoCobrar
+                  ? 'Listo p/ cobrar'
+                  : esEnCorte
+                  ? 'En corte'
+                  : ETIQUETA_ESTADO[cita.estado];
+
+                return (
+                  <Pressable
+                    key={cita.id}
+                    onPress={() => {
+                      if (puedeAbrirCuenta) onEntrarCliente(cita.id);
                     }}
+                    style={({ pressed }) => [
+                      {
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        paddingVertical: 13,
+                        borderBottomWidth: idx === citasDeHoy.length - 1 ? 0 : 1,
+                        borderBottomColor: colors.BzBorder,
+                        gap: 10,
+                      },
+                      pressed && puedeAbrirCuenta && { opacity: 0.8 },
+                    ]}
                   >
-                    <Text
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 }}>
+                      <View
+                        style={{
+                          width: 8,
+                          height: 8,
+                          borderRadius: 4,
+                          backgroundColor: dotColor,
+                        }}
+                      />
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ color: colors.BzText, fontSize: 14, fontWeight: '600' }} numberOfLines={1}>
+                          {cita.horaTexto} · {cita.clienteNombre}
+                        </Text>
+                        <Text style={{ color: colors.BzMuted, fontSize: 12, marginTop: 2 }} numberOfLines={1}>
+                          {cita.servicio} · {cita.barberoNombre} (${cita.precio})
+                        </Text>
+                      </View>
+                    </View>
+
+                    <View
                       style={{
-                        color: listaCobro ? colors.BzSuccess : colors.BzWarning,
-                        fontSize: 10,
-                        fontWeight: '800',
-                        letterSpacing: 0.5,
+                        paddingHorizontal: 12,
+                        paddingVertical: 6,
+                        borderRadius: 16,
+                        backgroundColor: esListoCobrar ? '#E2C46D' : colors.BzBg,
+                        borderWidth: esListoCobrar ? 0 : 1,
+                        borderColor: colors.BzBorder,
                       }}
                     >
-                      {listaCobro ? '● LISTO PARA COBRAR' : '● EN CORTE'}
-                    </Text>
-                  </View>
-                  <Text style={{ color: colors.BzMuted, fontSize: 12, fontWeight: '600' }}>
-                    {cita.horaTexto}
-                  </Text>
-                </Fila>
+                      <Text
+                        style={{
+                          color: esListoCobrar ? '#141416' : colors.BzText,
+                          fontSize: 11,
+                          fontWeight: esListoCobrar ? '800' : '500',
+                        }}
+                      >
+                        {textoPill}
+                      </Text>
+                    </View>
+                  </Pressable>
+                );
+              })}
+            </View>
+          )}
+        </View>
 
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14, marginTop: 4 }}>
-                  <View
-                    style={{
-                      width: 52,
-                      height: 52,
-                      borderRadius: 26,
-                      backgroundColor: colors.BzBg,
-                      borderWidth: 1.5,
-                      borderColor: '#E2C46D',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                    }}
-                  >
-                    <Text style={{ color: '#E2C46D', fontSize: 18, fontWeight: '800' }}>
-                      {iniciales || 'BZ'}
-                    </Text>
-                  </View>
-
-                  <View style={{ flex: 1 }}>
-                    <Text style={{ color: colors.BzText, fontSize: 19, fontWeight: '700' }} numberOfLines={1}>
-                      {cita.clienteNombre}
-                    </Text>
-                    <Text style={{ color: colors.BzMuted, fontSize: 13, marginTop: 2 }} numberOfLines={1}>
-                      Atiende: <Text style={{ color: '#E2C46D', fontWeight: '700' }}>{cita.barberoNombre}</Text>
-                    </Text>
-                  </View>
-                </View>
-
-                <Divisor />
-
-                <View style={{ gap: 4 }}>
-                  <Text style={{ color: colors.BzText, fontSize: 14, fontWeight: '600' }} numberOfLines={1}>
-                    {cita.servicio}
-                  </Text>
-                  <Text style={{ color: colors.BzMuted, fontSize: 12 }}>
-                    {extrasCount > 0
-                      ? `+ ${extrasCount} ${extrasCount === 1 ? 'concepto extra agregado' : 'conceptos extras agregados'}`
-                      : 'Sin productos o servicios extras aún'}
-                  </Text>
-                </View>
-
-                <View
-                  style={{
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    marginTop: 4,
-                    paddingTop: 10,
-                    borderTopWidth: 1,
-                    borderTopColor: colors.BzBorder,
-                  }}
-                >
-                  <View>
-                    <Text style={{ color: colors.BzMuted, fontSize: 10, fontWeight: '700', letterSpacing: 0.8 }}>
-                      CUENTA ACTUAL
-                    </Text>
-                    <Text style={{ color: colors.BzText, fontSize: 22, fontWeight: '700' }}>
-                      ${totalAcumulado}
-                    </Text>
-                  </View>
-
-                  <View
-                    style={{
-                      paddingHorizontal: 14,
-                      paddingVertical: 10,
-                      borderRadius: 12,
-                      backgroundColor: listaCobro ? '#E2C46D' : colors.BzBg,
-                      borderWidth: listaCobro ? 0 : 1,
-                      borderColor: colors.BzBorder,
-                    }}
-                  >
-                    <Text
-                      style={{
-                        color: listaCobro ? '#141416' : colors.BzText,
-                        fontSize: 12,
-                        fontWeight: '800',
-                      }}
-                    >
-                      Abrir cuenta ›
-                    </Text>
-                  </View>
-                </View>
+        {/* COLUMNA DERECHA: LISTA DE ESPERA */}
+        <View style={{ flexGrow: 1, flexBasis: 300, gap: 14 }}>
+          <View
+            style={{
+              backgroundColor: colors.BzCard,
+              borderColor: colors.BzBorder,
+              borderWidth: 1,
+              borderRadius: 16,
+              padding: 18,
+              gap: 12,
+            }}
+          >
+            <Fila>
+              <Etiqueta texto={`LISTA DE ESPERA (${clientesEnEspera.length})`} />
+              <Pressable onPress={onAbrirModalEspera}>
+                <Text style={{ color: '#E2C46D', fontSize: 12, fontWeight: '700' }}>
+                  + Anotar ›
+                </Text>
               </Pressable>
-            );
-          })}
-        </View>
-      )}
+            </Fila>
 
-      <Divisor />
-
-      {/* SECCIÓN 2: CLIENTES EN ESPERA (SALIERON A MANDADO / CAFÉ) CON BOTÓN DE AVISO */}
-      <Fila>
-        <View style={{ flex: 1 }}>
-          <Etiqueta texto={`EN ESPERA DE LUGAR (${clientesEnEspera.length})`} />
-          <Text style={{ color: colors.BzMuted, fontSize: 11, marginTop: 2 }}>
-            Clientes esperando turno mientras dan una vuelta o toman un café
-          </Text>
-        </View>
-
-        <Pressable
-          onPress={onAbrirModalEspera}
-          style={{
-            paddingHorizontal: 12,
-            paddingVertical: 8,
-            borderRadius: 10,
-            backgroundColor: '#E2C46D',
-          }}
-        >
-          <Text style={{ color: '#141416', fontSize: 12, fontWeight: '800' }}>
-            + Anotar en espera
-          </Text>
-        </Pressable>
-      </Fila>
-
-      {clientesEnEspera.length === 0 ? (
-        <Tarjeta padding={16} radius={14} gap={4}>
-          <Text style={{ color: colors.BzText, fontSize: 14, fontWeight: '600' }}>
-            No hay clientes en espera fuera del local
-          </Text>
-          <Text style={{ color: colors.BzMuted, fontSize: 12 }}>
-            Si todos los barberos están ocupados y un cliente sale a hacer un mandado, anótalo aquí para avisarle cuando se desocupe un lugar.
-          </Text>
-        </Tarjeta>
-      ) : (
-        <View style={styles.feedsGrid}>
-          {clientesEnEspera.map((esp) => (
-            <View
-              key={esp.id}
-              style={[
-                styles.feedCardGrande,
-                {
-                  backgroundColor: colors.BzCard,
-                  borderColor: esp.notificado ? colors.BzSuccess : colors.BzBorder,
-                  borderWidth: esp.notificado ? 1.5 : 1,
-                },
-              ]}
-            >
-              <Fila>
+            {clientesEnEspera.length === 0 ? (
+              <Text style={{ color: colors.BzMuted, fontSize: 12 }}>
+                Sin clientes esperando turno fuera del local.
+              </Text>
+            ) : (
+              clientesEnEspera.map((esp) => (
                 <View
+                  key={esp.id}
                   style={{
-                    paddingHorizontal: 10,
-                    paddingVertical: 4,
-                    borderRadius: 20,
-                    backgroundColor: colors.BzBg,
-                    borderWidth: 1,
-                    borderColor: esp.notificado ? colors.BzSuccess : '#E2C46D',
-                  }}
-                >
-                  <Text
-                    style={{
-                      color: esp.notificado ? colors.BzSuccess : '#E2C46D',
-                      fontSize: 10,
-                      fontWeight: '800',
-                    }}
-                  >
-                    {esp.notificado
-                      ? `✓ AVISO ENVIADO (${esp.horaNotificacion})`
-                      : `⏳ ESPERA ~${esp.tiempoEstMin} MIN`}
-                  </Text>
-                </View>
-                <Text style={{ color: colors.BzMuted, fontSize: 11 }}>
-                  Llegó {esp.horaRegistro}
-                </Text>
-              </Fila>
-
-              <View style={{ gap: 2 }}>
-                <Text style={{ color: colors.BzText, fontSize: 18, fontWeight: '700' }}>
-                  {esp.nombre}
-                </Text>
-                <Text style={{ color: colors.BzMuted, fontSize: 12 }}>
-                  Tel: {esp.telefono} · Busca: <Text style={{ color: colors.BzText, fontWeight: '600' }}>{esp.servicio}</Text>
-                </Text>
-              </View>
-
-              {/* Botón listo para conectar las notificaciones de lugar disponible */}
-              <View style={{ flexDirection: 'row', gap: 8, marginTop: 4 }}>
-                <Pressable
-                  onPress={() => onNotificarEspera(esp)}
-                  style={({ pressed }) => [
-                    {
-                      flex: 1,
-                      paddingVertical: 11,
-                      paddingHorizontal: 12,
-                      borderRadius: 12,
-                      backgroundColor: esp.notificado ? colors.BzBg : '#E2C46D',
-                      borderWidth: esp.notificado ? 1.5 : 0,
-                      borderColor: colors.BzSuccess,
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                    },
-                    pressed && { opacity: 0.85 },
-                  ]}
-                >
-                  <Text
-                    style={{
-                      color: esp.notificado ? colors.BzSuccess : '#141416',
-                      fontSize: 12,
-                      fontWeight: '800',
-                    }}
-                    numberOfLines={1}
-                  >
-                    {esp.notificado
-                      ? '🔔 Volver a avisar lugar'
-                      : '🔔 Avisar lugar disponible'}
-                  </Text>
-                </Pressable>
-
-                <Pressable
-                  onPress={() => onQuitarEspera(esp.id)}
-                  style={{
-                    paddingVertical: 11,
-                    paddingHorizontal: 12,
+                    padding: 12,
                     borderRadius: 12,
                     backgroundColor: colors.BzBg,
                     borderWidth: 1,
-                    borderColor: colors.BzBorder,
-                    alignItems: 'center',
-                    justifyContent: 'center',
+                    borderColor: esp.notificado ? colors.BzSuccess : colors.BzBorder,
+                    gap: 8,
                   }}
                 >
-                  <Text style={{ color: colors.BzText, fontSize: 11, fontWeight: '700' }}>
-                    Ya pasó ✓
-                  </Text>
-                </Pressable>
-              </View>
-            </View>
-          ))}
+                  <Fila>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ color: colors.BzText, fontSize: 14, fontWeight: '600' }}>
+                        {esp.nombre} · {esp.servicio}
+                      </Text>
+                      <Text style={{ color: colors.BzMuted, fontSize: 11, marginTop: 1 }}>
+                        ~{esp.tiempoEstMin} min · Tel: {esp.telefono}
+                      </Text>
+                    </View>
+                  </Fila>
+
+                  <View style={{ flexDirection: 'row', gap: 8 }}>
+                    <Pressable
+                      onPress={() => onNotificarEspera(esp)}
+                      style={{
+                        flex: 1,
+                        paddingVertical: 8,
+                        paddingHorizontal: 10,
+                        borderRadius: 8,
+                        backgroundColor: esp.notificado ? colors.BzCard : '#E2C46D',
+                        borderWidth: esp.notificado ? 1 : 0,
+                        borderColor: colors.BzSuccess,
+                        alignItems: 'center',
+                      }}
+                    >
+                      <Text
+                        style={{
+                          color: esp.notificado ? colors.BzSuccess : '#141416',
+                          fontSize: 11,
+                          fontWeight: '700',
+                        }}
+                      >
+                        {esp.notificado ? `✓ Avisado (${esp.horaNotificacion})` : '🔔 Avisar lugar'}
+                      </Text>
+                    </Pressable>
+
+                    <Pressable
+                      onPress={() => onQuitarEspera(esp.id)}
+                      style={{
+                        paddingVertical: 8,
+                        paddingHorizontal: 10,
+                        borderRadius: 8,
+                        backgroundColor: colors.BzCard,
+                        borderWidth: 1,
+                        borderColor: colors.BzBorder,
+                      }}
+                    >
+                      <Text style={{ color: colors.BzText, fontSize: 11, fontWeight: '600' }}>
+                        Ya pasó ✓
+                      </Text>
+                    </Pressable>
+                  </View>
+                </View>
+              ))
+            )}
+          </View>
         </View>
-      )}
+      </View>
     </ScrollView>
   );
 };
@@ -2602,17 +2558,26 @@ const VistaAperturaTurno: React.FC<{ usuario: UsuarioBz; onAbrirTurno: (fondo: n
 };
 
 const styles = StyleSheet.create({
-  feedsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 14,
-  },
-  feedCardGrande: {
+  kpiBox: {
     flexGrow: 1,
-    flexBasis: 300,
-    padding: 18,
-    borderRadius: 18,
-    gap: 12,
+    flexBasis: 165,
+    padding: 16,
+    borderRadius: 14,
+    borderWidth: 1,
+    gap: 4,
+  },
+  kpiNum: {
+    fontSize: 26,
+    fontWeight: '700',
+  },
+  kpiTit: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.6,
+  },
+  kpiSub: {
+    fontSize: 12,
+    marginTop: 2,
   },
   camaraWrapper: {
     height: 230,

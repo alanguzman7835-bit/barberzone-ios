@@ -1,0 +1,14 @@
+﻿node_modules/
+.expo/
+dist/
+dist-electron/
+release/
+build/
+out/
+web-build/
+*.exe
+*.asar
+*.zip
+*.ipa
+*.apk
+*.mp4

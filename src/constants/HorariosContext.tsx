@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState } from 'react';
+import { useCatalogoConfig } from './CatalogoConfigContext';
 import { RolSesion } from './Sesion';
 
 export type DiaSemana = 'Lun' | 'Mar' | 'Mié' | 'Jue' | 'Vie' | 'Sáb' | 'Dom';
@@ -74,144 +75,56 @@ const TURNOS_BASE_DEFAULT: Record<DiaSemana, TurnoCodigo> = {
   Dom: 'Matutino (09:00 - 16:00)',
 };
 
-const INICIAL_BARBEROS: HorarioSemanalEmpleado[] = [
-  {
-    empleadoId: 'b1',
-    nombre: 'Carlos R.',
-    rol: 'BARBERO',
-    rolSesion: RolSesion.BARBERO,
-    sucursal: 'Olivete',
-    turnos: {
-      Lun: 'Matutino (09:00 - 16:00)',
-      Mar: 'Matutino (09:00 - 16:00)',
-      Mié: 'Descanso',
-      Jue: 'Completo (10:00 - 20:00)',
-      Vie: 'Completo (10:00 - 20:00)',
-      Sáb: 'Completo (10:00 - 20:00)',
-      Dom: 'Matutino (09:00 - 16:00)',
-    },
-  },
-  {
-    empleadoId: 'b2',
-    nombre: 'Diego M.',
-    rol: 'BARBERO',
-    rolSesion: RolSesion.BARBERO,
-    sucursal: 'Olivete',
-    turnos: {
-      Lun: 'Descanso',
-      Mar: 'Permiso',
-      Mié: 'Vespertino (14:00 - 21:00)',
-      Jue: 'Vespertino (14:00 - 21:00)',
-      Vie: 'Completo (10:00 - 20:00)',
-      Sáb: 'Completo (10:00 - 20:00)',
-      Dom: 'Vespertino (14:00 - 21:00)',
-    },
-  },
-  {
-    empleadoId: 'b3',
-    nombre: 'Andrés M.',
-    rol: 'BARBERO',
-    rolSesion: RolSesion.BARBERO,
-    sucursal: 'Olivete',
-    turnos: {
-      Lun: 'Vespertino (14:00 - 21:00)',
-      Mar: 'Descanso',
-      Mié: 'Matutino (09:00 - 16:00)',
-      Jue: 'Matutino (09:00 - 16:00)',
-      Vie: 'Vespertino (14:00 - 21:00)',
-      Sáb: 'Completo (10:00 - 20:00)',
-      Dom: 'Descanso',
-    },
-  },
-  {
-    empleadoId: 'b4',
-    nombre: 'Mateo S.',
-    rol: 'BARBERO',
-    rolSesion: RolSesion.BARBERO,
-    sucursal: 'Olivete',
-    turnos: {
-      Lun: 'Completo (10:00 - 20:00)',
-      Mar: 'Completo (10:00 - 20:00)',
-      Mié: 'Vespertino (14:00 - 21:00)',
-      Jue: 'Descanso',
-      Vie: 'Matutino (09:00 - 16:00)',
-      Sáb: 'Completo (10:00 - 20:00)',
-      Dom: 'Matutino (09:00 - 16:00)',
-    },
-  },
-];
-
-const INICIAL_CAJEROS: HorarioSemanalEmpleado[] = [
-  {
-    empleadoId: 'ana',
-    nombre: 'Ana M.',
-    rol: 'CAJERO',
-    rolSesion: RolSesion.RECEPCION,
-    sucursal: 'Olivete',
-    turnos: {
-      Lun: 'Matutino (09:00 - 16:00)',
-      Mar: 'Matutino (09:00 - 16:00)',
-      Mié: 'Matutino (09:00 - 16:00)',
-      Jue: 'Descanso',
-      Vie: 'Completo (10:00 - 20:00)',
-      Sáb: 'Completo (10:00 - 20:00)',
-      Dom: 'Matutino (09:00 - 16:00)',
-    },
-  },
-  {
-    empleadoId: 'caj2',
-    nombre: 'Sofía L.',
-    rol: 'CAJERO',
-    rolSesion: RolSesion.RECEPCION,
-    sucursal: 'Olivete',
-    turnos: {
-      Lun: 'Vespertino (14:00 - 21:00)',
-      Mar: 'Descanso',
-      Mié: 'Vespertino (14:00 - 21:00)',
-      Jue: 'Permiso',
-      Vie: 'Vespertino (14:00 - 21:00)',
-      Sáb: 'Completo (10:00 - 20:00)',
-      Dom: 'Vespertino (14:00 - 21:00)',
-    },
-  },
-];
-
-const INICIAL_PERMISOS: PermisoEmpleado[] = [
-  {
-    id: 'perm-1',
-    empleadoId: 'b2',
-    empleadoNombre: 'Diego M.',
-    rolEtiqueta: RolSesion.BARBERO,
-    sucursal: 'Olivete',
-    fechaTexto: 'Hoy · Todo el día',
-    esHoy: true,
-    tipo: 'Día completo',
-    motivo: 'Cita médica personal',
-    estado: 'Aprobado',
-  },
-  {
-    id: 'perm-2',
-    empleadoId: 'ana',
-    empleadoNombre: 'Ana M.',
-    rolEtiqueta: RolSesion.RECEPCION,
-    sucursal: 'Olivete',
-    fechaTexto: 'Mañana · 16:00 - 20:00',
-    esHoy: false,
-    tipo: 'Medio turno',
-    motivo: 'Trámite escolar',
-    estado: 'Aprobado',
-  },
-];
-
 const HorariosContext = createContext<HorariosContextValue | null>(null);
 
 export const HorariosProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { empleados } = useCatalogoConfig();
   const [semanaEtiqueta, setSemanaEtiqueta] = useState('Semana actual (Lun - Dom)');
-  const [horariosBarberos, setHorariosBarberos] = useState<HorarioSemanalEmpleado[]>(INICIAL_BARBEROS);
-  const [horariosCajeros, setHorariosCajeros] = useState<HorarioSemanalEmpleado[]>(INICIAL_CAJEROS);
-  const [ultimaActualizacionBarberos, setUltimaActualizacionBarberos] = useState('Hoy · 08:30');
-  const [ultimaActualizacionCajeros, setUltimaActualizacionCajeros] = useState('Hoy · 08:35');
-  const [permisos, setPermisos] = useState<PermisoEmpleado[]>(INICIAL_PERMISOS);
+  const [horariosBarberos, setHorariosBarberos] = useState<HorarioSemanalEmpleado[]>([]);
+  const [horariosCajeros, setHorariosCajeros] = useState<HorarioSemanalEmpleado[]>([]);
+  const [ultimaActualizacionBarberos, setUltimaActualizacionBarberos] = useState('Sin cambios hoy');
+  const [ultimaActualizacionCajeros, setUltimaActualizacionCajeros] = useState('Sin cambios hoy');
+  const [permisos, setPermisos] = useState<PermisoEmpleado[]>([]);
+
+  // Sincroniza los horarios con los empleados reales activos de la base de datos
+  useEffect(() => {
+    const activos = empleados.filter((e) => e.activo);
+    const barberosBD = activos.filter((e) => e.rol === 'Barbero');
+    const cajerosBD = activos.filter((e) => e.rol !== 'Barbero');
+
+    setHorariosBarberos((prev) =>
+      barberosBD.map((emp) => {
+        const existente = prev.find((p) => p.empleadoId === emp.id);
+        return existente
+          ? { ...existente, nombre: emp.nombre, sucursal: emp.sucursal }
+          : {
+              empleadoId: emp.id,
+              nombre: emp.nombre,
+              rol: 'BARBERO',
+              rolSesion: RolSesion.BARBERO,
+              sucursal: emp.sucursal || 'Olivete',
+              turnos: { ...TURNOS_BASE_DEFAULT },
+            };
+      }),
+    );
+
+    setHorariosCajeros((prev) =>
+      cajerosBD.map((emp) => {
+        const existente = prev.find((p) => p.empleadoId === emp.id);
+        const rolSes = RolSesion.RECEPCION;
+        return existente
+          ? { ...existente, nombre: emp.nombre, sucursal: emp.sucursal, rolSesion: rolSes }
+          : {
+              empleadoId: emp.id,
+              nombre: emp.nombre,
+              rol: 'CAJERO',
+              rolSesion: rolSes,
+              sucursal: emp.sucursal || 'Olivete',
+              turnos: { ...TURNOS_BASE_DEFAULT },
+            };
+      }),
+    );
+  }, [empleados]);
 
   const actualizarTurnoEmpleado = (
     grupo: 'BARBERO' | 'CAJERO',
@@ -259,10 +172,6 @@ export const HorariosProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
   };
 
-  /**
-   * Da de alta un nuevo Barbero o Cajero/Encargado y lo añade automáticamente
-   * a su tabla semanal de horarios.
-   */
   const registrarIntegranteEnHorarios = (datos: {
     empleadoId?: string;
     nombre: string;
@@ -281,16 +190,12 @@ export const HorariosProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     };
 
     if (esBarbero) {
-      setHorariosBarberos((prev) => [...prev, nuevoRegistro]);
+      setHorariosBarberos((prev) => (prev.some((e) => e.empleadoId === id) ? prev : [...prev, nuevoRegistro]));
     } else {
-      setHorariosCajeros((prev) => [...prev, nuevoRegistro]);
+      setHorariosCajeros((prev) => (prev.some((e) => e.empleadoId === id) ? prev : [...prev, nuevoRegistro]));
     }
   };
 
-  /**
-   * Cambia el rol de cualquier integrante (Barbero <-> Recepción/Cajero <-> Encargado)
-   * y lo reubica automáticamente en su tabla semanal correspondiente.
-   */
   const cambiarRolIntegrante = (empleadoId: string, nuevoRol: RolSesion) => {
     const enBarberos = horariosBarberos.find((e) => e.empleadoId === empleadoId);
     const enCajeros = horariosCajeros.find((e) => e.empleadoId === empleadoId);

@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Image, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import {
-  EQUIPO_BARBEROS,
   ETIQUETA_ESTADO,
   claveDia,
   fechaDesdeClave,
@@ -14,6 +13,7 @@ import {
 } from '../constants/AgendaTipos';
 import { folioLibre } from '../constants/AgendaContext';
 import { useBzTheme } from '../constants/BzTheme';
+import { useCatalogoConfig } from '../constants/CatalogoConfigContext';
 import { RolSesion, UsuarioBz } from '../constants/Sesion';
 import { useDesktopLayout } from '../hooks/useDesktopLayout';
 import {
@@ -158,11 +158,23 @@ export const AgendaEquipoScreen: React.FC<{
 }> = ({ usuario, citas, onNuevaCita, onCambiarEstado, onAgregarCita }) => {
   const { colors } = useBzTheme();
   const { isDesktop } = useDesktopLayout();
+  const { empleados } = useCatalogoConfig();
   const esBarbero = usuario.rol === RolSesion.BARBERO;
   const hoy = hoyISO();
 
   const sucursalUsuario =
     usuario.sucursal && usuario.sucursal !== 'Todas' ? normalizarSucursal(usuario.sucursal) : null;
+
+  const equipoBarberosReales = useMemo(
+    () =>
+      empleados.filter(
+        (e) =>
+          e.activo &&
+          e.rol === 'Barbero' &&
+          (!sucursalUsuario || normalizarSucursal(e.sucursal) === sucursalUsuario),
+      ),
+    [empleados, sucursalUsuario],
+  );
 
   const [diaSel, setDiaSel] = useState<string>(hoy);
   const [diaInicioGrid, setDiaInicioGrid] = useState<string>(hoy);
@@ -259,11 +271,8 @@ export const AgendaEquipoScreen: React.FC<{
     };
   }, []);
 
-  const [listaEspera, setListaEspera] = useState<ItemListaEspera[]>([
-    { id: 1, cliente: 'Hugo P.', servicio: 'Barba', barberoId: 'ANY', esperaMin: 15 },
-    { id: 2, cliente: 'Raúl T.', servicio: 'Ceja', barberoId: 'b1', esperaMin: 25 },
-    { id: 3, cliente: 'Beto L.', servicio: 'Corte', barberoId: 'ANY', esperaMin: 35 },
-  ]);
+  // Lista de espera limpia (sin datos de demostración)
+  const [listaEspera, setListaEspera] = useState<ItemListaEspera[]>([]);
 
   const visibles = useMemo(
     () =>
@@ -291,15 +300,14 @@ export const AgendaEquipoScreen: React.FC<{
     return citasDelDia.find((c) => c.estado === 'EN_SERVICIO') ?? citasDelDia[0] ?? null;
   }, [citasFocusIds, visibles, citasDelDia]);
 
-  const barberosColumnas = useMemo(
-    () =>
-      esBarbero
-        ? EQUIPO_BARBEROS.filter((b) => b.id === usuario.id)
-        : barberoFiltro === 'TODOS'
-        ? EQUIPO_BARBEROS
-        : EQUIPO_BARBEROS.filter((b) => b.id === barberoFiltro),
-    [esBarbero, usuario.id, barberoFiltro],
-  );
+  const barberosColumnas = useMemo(() => {
+    if (esBarbero) {
+      const propio = equipoBarberosReales.filter((b) => b.id === usuario.id);
+      return propio.length > 0 ? propio : [{ id: usuario.id, nombre: usuario.nombre }];
+    }
+    if (barberoFiltro === 'TODOS') return equipoBarberosReales;
+    return equipoBarberosReales.filter((b) => b.id === barberoFiltro);
+  }, [esBarbero, equipoBarberosReales, usuario.id, usuario.nombre, barberoFiltro]);
 
   const diasSemana = useMemo(
     () => Array.from({ length: 7 }, (_, i) => moverDia(diaInicioGrid, i)),
@@ -341,6 +349,8 @@ export const AgendaEquipoScreen: React.FC<{
   const topLineaAhora = (offsetAhora / 60) * altoHoraActual;
 
   const asignarEspera = (espera: ItemListaEspera) => {
+    if (equipoBarberosReales.length === 0) return;
+
     const now = new Date();
     const hora24 = now.getHours();
     const minuto = now.getMinutes();
@@ -361,8 +371,8 @@ export const AgendaEquipoScreen: React.FC<{
 
     const barbero =
       espera.barberoId !== 'ANY'
-        ? EQUIPO_BARBEROS.find((b) => b.id === espera.barberoId) ?? EQUIPO_BARBEROS[0]
-        : EQUIPO_BARBEROS.find((b) => !ocupado(b.id)) ?? EQUIPO_BARBEROS[0];
+        ? equipoBarberosReales.find((b) => b.id === espera.barberoId) ?? equipoBarberosReales[0]
+        : equipoBarberosReales.find((b) => !ocupado(b.id)) ?? equipoBarberosReales[0];
 
     const folio = folioLibre(citas.map((c) => c.folio));
     const nuevoId = `cita-${folio}`;
@@ -472,8 +482,32 @@ export const AgendaEquipoScreen: React.FC<{
     setIsGrabbing(true);
   };
 
-  /* ----- Cuadrícula de Horario por Barbero (4 Columnas Completas) ----- */
+  /* ----- Cuadrícula de Horario por Barbero ----- */
   const renderCalendarioEjecutivo = () => {
+    if (barberosColumnas.length === 0) {
+      return (
+        <View
+          style={[
+            styles.gridOuter,
+            {
+              backgroundColor: colors.BzCard,
+              borderColor: colors.BzBorder,
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: 24,
+            },
+          ]}
+        >
+          <Text style={{ color: colors.BzText, fontSize: 15, fontWeight: '700', marginBottom: 6 }}>
+            Sin barberos registrados todavía
+          </Text>
+          <Text style={{ color: colors.BzMuted, fontSize: 12.5, textAlign: 'center', maxWidth: 340 }}>
+            Da de alta a tus barberos en Inicio o en la sección Base de datos para que aparezcan sus columnas en la agenda.
+          </Text>
+        </View>
+      );
+    }
+
     const altoTotal = HORAS_GRID.length * altoHoraActual;
     const anchoTotalBarberos = barberosColumnas.length * minAnchoColumna;
     const anchoGridTotal = ANCHO_COL_HORA + anchoTotalBarberos;
@@ -888,7 +922,7 @@ export const AgendaEquipoScreen: React.FC<{
       >
         {!esBarbero && (
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 7 }}>
-            {[{ id: 'TODOS', nombre: 'Todos' }, ...EQUIPO_BARBEROS].map((b) => {
+            {[{ id: 'TODOS', nombre: 'Todos' }, ...equipoBarberosReales].map((b) => {
               const act = barberoFiltro === b.id;
               return (
                 <Pressable
@@ -1137,6 +1171,7 @@ export const AgendaEquipoScreen: React.FC<{
       {/* Registrar walk-in */}
       <BzSheet visible={mostrarWalkIn} onDismiss={() => setMostrarWalkIn(false)}>
         <RegistrarWalkInSheet
+          barberosDisponibles={equipoBarberosReales}
           posicion={listaEspera.length + 1}
           onAgregar={(nombre, servicio, barberoId) => {
             setListaEspera((l) => [
@@ -1278,16 +1313,17 @@ const CitaSeleccionadaCard: React.FC<{
 /* ===================================================================== */
 
 const RegistrarWalkInSheet: React.FC<{
+  barberosDisponibles: { id: string; nombre: string }[];
   posicion: number;
   onAgregar: (nombre: string, servicio: string, barberoId: string) => void;
   onCancelar: () => void;
-}> = ({ posicion, onAgregar, onCancelar }) => {
+}> = ({ barberosDisponibles, posicion, onAgregar, onCancelar }) => {
   const { colors } = useBzTheme();
   const [nombre, setNombre] = useState('');
   const [servicioSel, setServicioSel] = useState(SERVICIOS_WALKIN[0].etiqueta);
   const [barberoSel, setBarberoSel] = useState('ANY');
 
-  const barberos = [{ id: 'ANY', nombre: 'Cualquiera' }, ...EQUIPO_BARBEROS];
+  const barberos = [{ id: 'ANY', nombre: 'Cualquiera' }, ...barberosDisponibles];
 
   return (
     <>

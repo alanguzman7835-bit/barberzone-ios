@@ -1,6 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { useBzTheme } from '../constants/BzTheme';
+import { useCatalogoConfig } from '../constants/CatalogoConfigContext';
 import { RolSesion, UsuarioBz } from '../constants/Sesion';
 import { CasillasPin, EstadoPin } from './Animaciones';
 import {
@@ -19,7 +20,7 @@ import {
 type SubVista = 'MENU_MAS' | 'FICHA_CLIENTE' | 'PRENOMINA' | 'BITACORA';
 
 interface RegistroNomina {
-  id: number;
+  id: string;
   iniciales: string;
   nombre: string;
   servicios: number;
@@ -36,8 +37,15 @@ interface EventoAuditoria {
   autorizo: string;
 }
 
+function obtenerIniciales(nombre: string): string {
+  const partes = nombre.trim().split(/\s+/);
+  if (partes.length === 0 || !partes[0]) return 'BZ';
+  if (partes.length === 1) return partes[0].slice(0, 2).toUpperCase();
+  return `${partes[0][0]}${partes[1][0]}`.toUpperCase();
+}
+
 /**
- * Administración Operativa: Menú "Más" (23) · Ficha cliente (9) · Pre-nómina (17) · Bitácora (18) · PIN (15)
+ * Administración Operativa: Menú "Más" · Ficha cliente · Pre-nómina · Bitácora · PIN
  */
 export const AdminOperacionesScreen: React.FC<{
   usuario: UsuarioBz;
@@ -45,23 +53,31 @@ export const AdminOperacionesScreen: React.FC<{
   onNewUser: () => void;
   onLogout: () => void;
 }> = ({ usuario, onIrInventario, onNewUser, onLogout }) => {
+  const { empleados } = useCatalogoConfig();
   const [subVista, setSubVista] = useState<SubVista>('MENU_MAS');
   const [mostrarPin, setMostrarPin] = useState(false);
   const [mensajeAut, setMensajeAut] = useState<string | null>(null);
+  const [aprobadasIds, setAprobadasIds] = useState<Record<string, boolean>>({});
 
-  const [nominas, setNominas] = useState<RegistroNomina[]>([
-    { id: 1, iniciales: 'CR', nombre: 'Carlos R.', servicios: 6420, productos: 540, propinas: 1120, deducciones: 180, aprobada: false },
-    { id: 2, iniciales: 'DM', nombre: 'Diego M.', servicios: 5500, productos: 410, propinas: 940, deducciones: 0, aprobada: false },
-    { id: 3, iniciales: 'LS', nombre: 'Luis S.', servicios: 4800, productos: 320, propinas: 860, deducciones: 0, aprobada: false },
-  ]);
+  // Genera registros de pre-nómina únicamente con los empleados reales (excluyendo al Dueño)
+  const nominas: RegistroNomina[] = useMemo(
+    () =>
+      empleados
+        .filter((e) => e.activo && e.rol !== 'Dueño')
+        .map((e) => ({
+          id: e.id,
+          iniciales: obtenerIniciales(e.nombre),
+          nombre: e.nombre,
+          servicios: 0,
+          productos: 0,
+          propinas: 0,
+          deducciones: 0,
+          aprobada: Boolean(aprobadasIds[e.id]),
+        })),
+    [empleados, aprobadasIds],
+  );
 
-  const [bitacora, setBitacora] = useState<EventoAuditoria[]>([
-    { hora: '13:42', categoria: 'Descuentos', descripcion: 'Descuento 10 % · Ana M.', autorizo: 'Autorizó Luis G.' },
-    { hora: '12:10', categoria: 'Caja', descripcion: 'Venta cancelada OLI-000119', autorizo: 'Autorizó Luis G.' },
-    { hora: '11:05', categoria: 'Precios', descripcion: 'Precio de Barba $110 → $120', autorizo: 'Dueño' },
-    { hora: '10:00', categoria: 'Caja', descripcion: 'Apertura de turno ($500)', autorizo: 'Ana M.' },
-    { hora: 'Ayer', categoria: 'Caja', descripcion: 'Corte con diferencia -$20', autorizo: 'Ana M.' },
-  ]);
+  const [bitacora, setBitacora] = useState<EventoAuditoria[]>([]);
 
   const agregarEvento = (e: EventoAuditoria) => setBitacora((b) => [e, ...b]);
 
@@ -89,8 +105,13 @@ export const AdminOperacionesScreen: React.FC<{
           onAprobar={(id) => {
             const reg = nominas.find((n) => n.id === id);
             if (reg) {
-              setNominas((ns) => ns.map((n) => (n.id === id ? { ...n, aprobada: true } : n)));
-              agregarEvento({ hora: 'Ahora', categoria: 'Caja', descripcion: `Pre-nómina aprobada (${reg.nombre})`, autorizo: usuario.nombre });
+              setAprobadasIds((prev) => ({ ...prev, [id]: true }));
+              agregarEvento({
+                hora: 'Ahora',
+                categoria: 'Caja',
+                descripcion: `Pre-nómina aprobada (${reg.nombre})`,
+                autorizo: usuario.nombre,
+              });
             }
           }}
           onVolver={() => setSubVista('MENU_MAS')}
@@ -101,11 +122,17 @@ export const AdminOperacionesScreen: React.FC<{
 
       <BzSheet visible={mostrarPin} onDismiss={() => setMostrarPin(false)}>
         <AutorizacionPinSheet
+          usuarioNombre={usuario.nombre}
           pinEsperado={usuario.pin}
           onAutorizado={() => {
             setMostrarPin(false);
             setMensajeAut(`Descuento 10 % autorizado por ${usuario.nombre}.`);
-            agregarEvento({ hora: 'Ahora', categoria: 'Descuentos', descripcion: 'Descuento 10 % · Orden actual', autorizo: `Autorizó ${usuario.nombre}` });
+            agregarEvento({
+              hora: 'Ahora',
+              categoria: 'Descuentos',
+              descripcion: 'Descuento 10 % · Orden actual',
+              autorizo: `Autorizó ${usuario.nombre}`,
+            });
           }}
           onRechazar={() => setMostrarPin(false)}
         />
@@ -114,7 +141,7 @@ export const AdminOperacionesScreen: React.FC<{
   );
 };
 
-/* ---------- Vista 23: Menú "Más" ---------- */
+/* ---------- Menú "Más" ---------- */
 
 const VistaMenuMas: React.FC<{
   usuario: UsuarioBz;
@@ -129,9 +156,9 @@ const VistaMenuMas: React.FC<{
 }> = ({ usuario, mensajeAutorizacion, onFicha, onPrenomina, onBitacora, onPin, onIrInventario, onNewUser, onLogout }) => {
   const { colors } = useBzTheme();
   const opciones = [
-    { titulo: 'Clientes y tarjetas de lealtad', sub: 'Ver ficha de Juan Pérez', accion: onFicha },
+    { titulo: 'Clientes y tarjetas de lealtad', sub: 'Consultar fichas y sellos de lealtad', accion: onFicha },
     { titulo: 'Inventario, traspasos y compras', sub: 'Control de stock sucursal', accion: onIrInventario },
-    { titulo: 'Pre-nómina quincenal', sub: 'Comisiones y deducciones', accion: onPrenomina },
+    { titulo: 'Pre-nómina quincenal', sub: 'Comisiones y deducciones del equipo', accion: onPrenomina },
     { titulo: 'Bitácora de auditoría', sub: 'Descuentos, precios y caja', accion: onBitacora },
     { titulo: 'Autorizar descuento con PIN', sub: 'Validación rápida de encargado', accion: onPin },
   ];
@@ -205,7 +232,7 @@ const VistaMenuMas: React.FC<{
   );
 };
 
-/* ---------- Vista 9: Ficha de cliente ---------- */
+/* ---------- Ficha de cliente ---------- */
 
 const VistaFichaCliente: React.FC<{ onVolver: () => void }> = ({ onVolver }) => {
   const { colors } = useBzTheme();
@@ -227,71 +254,57 @@ const VistaFichaCliente: React.FC<{ onVolver: () => void }> = ({ onVolver }) => 
           justifyContent: 'center',
         }}
       >
-        <Text style={{ color: colors.BzText, fontSize: 20 }}>JP</Text>
+        <Text style={{ color: colors.BzText, fontSize: 20 }}>CL</Text>
       </View>
-      <Titulo texto="Juan Pérez" />
-      <Text style={{ color: colors.BzMuted, fontSize: 12 }}>33 1234 5678 · Cliente frecuente</Text>
-
-      <View style={{ flexDirection: 'row', gap: 8, width: '100%' }}>
-        {[
-          ['14', 'visitas'],
-          ['$290', 'ticket prom.'],
-          ['3 sem', 'última visita'],
-        ].map(([v, etq]) => (
-          <Tarjeta key={etq} padding={10} radius={12} gap={0} style={{ flex: 1, alignItems: 'center' }}>
-            <Text style={{ color: colors.BzText, fontSize: 16, fontWeight: '500' }}>{v}</Text>
-            <Text style={{ color: colors.BzMuted, fontSize: 10 }}>{etq}</Text>
-          </Tarjeta>
-        ))}
-      </View>
+      <Titulo texto="Clientes registrados" />
+      <Text style={{ color: colors.BzMuted, fontSize: 12 }}>Busca o selecciona un cliente desde Agenda o Caja</Text>
 
       <Tarjeta style={{ width: '100%', alignItems: 'center' }}>
         <View style={{ alignSelf: 'flex-start' }}>
-          <Etiqueta texto="TARJETA DE LEALTAD" />
+          <Etiqueta texto="PROGRAMA DE LEALTAD" />
         </View>
         <View style={{ flexDirection: 'row', gap: 8 }}>
           {Array.from({ length: 10 }).map((_, idx) => (
             <View
               key={idx}
-              style={{ width: 14, height: 14, borderRadius: 7, backgroundColor: idx < 7 ? colors.BzText : colors.BzBg }}
+              style={{ width: 14, height: 14, borderRadius: 7, backgroundColor: colors.BzBg, borderWidth: 1, borderColor: colors.BzBorder }}
             />
           ))}
         </View>
-        <Text style={{ color: colors.BzMuted, fontSize: 11 }}>Te faltan 3 visitas para tu corte gratis</Text>
-      </Tarjeta>
-
-      <Tarjeta gap={6} style={{ width: '100%' }}>
-        <Etiqueta texto="ÚLTIMO CORTE" />
-        <Text style={{ color: colors.BzText, fontSize: 13 }}>Fade medio · #2 laterales · #4 arriba · Barba perfilada</Text>
-        <Text style={{ color: colors.BzMuted, fontSize: 12 }}>Nota: Prefiere fade bajo, sin raya</Text>
-      </Tarjeta>
-
-      <Tarjeta style={{ width: '100%' }}>
-        <Etiqueta texto="HISTORIAL DE VISITAS" />
-        <Fila>
-          <Text style={{ color: colors.BzText, fontSize: 12 }}>27 oct · Corte · Carlos R.</Text>
-          <Text style={{ color: colors.BzMuted, fontSize: 12 }}>$180</Text>
-        </Fila>
-        <Divisor />
-        <Fila>
-          <Text style={{ color: colors.BzText, fontSize: 12 }}>06 oct · Corte + barba · Carlos R.</Text>
-          <Text style={{ color: colors.BzMuted, fontSize: 12 }}>$300</Text>
-        </Fila>
+        <Text style={{ color: colors.BzMuted, fontSize: 11 }}>10 visitas acumuladas = 1 servicio de cortesía</Text>
       </Tarjeta>
     </ScrollView>
   );
 };
 
-/* ---------- Vista 17: Pre-nómina ---------- */
+/* ---------- Pre-nómina ---------- */
 
 const VistaPreNomina: React.FC<{
   nominas: RegistroNomina[];
-  onAprobar: (id: number) => void;
+  onAprobar: (id: string) => void;
   onVolver: () => void;
 }> = ({ nominas, onAprobar, onVolver }) => {
   const { colors } = useBzTheme();
   const [sel, setSel] = useState(0);
-  const actual = nominas[sel];
+
+  if (nominas.length === 0) {
+    return (
+      <ScrollView contentContainerStyle={{ paddingHorizontal: 20, paddingVertical: 16, gap: 12 }}>
+        <Volver onPress={onVolver} />
+        <Titulo texto="Pre-nómina" size={22} />
+        <Tarjeta padding={18} radius={14} gap={6}>
+          <Text style={{ color: colors.BzText, fontSize: 14, fontWeight: '600' }}>
+            Sin empleados registrados
+          </Text>
+          <Text style={{ color: colors.BzMuted, fontSize: 12 }}>
+            Cuando des de alta barberos o personal en Base de datos, aparecerán aquí automáticamente para calcular su pre-nómina.
+          </Text>
+        </Tarjeta>
+      </ScrollView>
+    );
+  }
+
+  const actual = nominas[sel] ?? nominas[0];
   const neto = actual.servicios + actual.productos + actual.propinas - actual.deducciones;
 
   return (
@@ -316,7 +329,7 @@ const VistaPreNomina: React.FC<{
           <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: actual.aprobada ? colors.BzSuccess : colors.BzWarning }} />
           <Text style={{ color: colors.BzText, fontSize: 11 }}>{actual.aprobada ? 'Aprobada' : 'En revisión'}</Text>
         </View>
-        <Text style={{ color: colors.BzMuted, fontSize: 12 }}>Quincena 1–15 nov</Text>
+        <Text style={{ color: colors.BzMuted, fontSize: 12 }}>Quincena actual</Text>
       </View>
 
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
@@ -349,12 +362,14 @@ const VistaPreNomina: React.FC<{
         </Fila>
       </Tarjeta>
 
-      {!actual.aprobada && <BotonPrimario texto={`Aprobar pre-nómina de ${actual.nombre}`} onPress={() => onAprobar(actual.id)} />}
+      {!actual.aprobada && (
+        <BotonPrimario texto={`Aprobar pre-nómina de ${actual.nombre}`} onPress={() => onAprobar(actual.id)} />
+      )}
     </ScrollView>
   );
 };
 
-/* ---------- Vista 18: Bitácora ---------- */
+/* ---------- Bitácora ---------- */
 
 const VistaBitacora: React.FC<{ eventos: EventoAuditoria[]; onVolver: () => void }> = ({ eventos, onVolver }) => {
   const { colors } = useBzTheme();
@@ -372,15 +387,23 @@ const VistaBitacora: React.FC<{ eventos: EventoAuditoria[]; onVolver: () => void
         ))}
       </ScrollView>
 
-      {filtrados.map((ev, idx) => (
-        <Tarjeta key={`${ev.hora}-${idx}`} padding={12} radius={12} gap={4}>
-          <Fila>
-            <Text style={{ color: colors.BzText, fontSize: 12, fontWeight: '600' }}>{ev.hora}</Text>
-            <Text style={{ color: colors.BzMuted, fontSize: 11 }}>{ev.autorizo}</Text>
-          </Fila>
-          <Text style={{ color: colors.BzText, fontSize: 13 }}>{ev.descripcion}</Text>
+      {filtrados.length === 0 ? (
+        <Tarjeta padding={16} radius={12}>
+          <Text style={{ color: colors.BzMuted, fontSize: 12 }}>
+            No hay eventos registrados en la bitácora todavía.
+          </Text>
         </Tarjeta>
-      ))}
+      ) : (
+        filtrados.map((ev, idx) => (
+          <Tarjeta key={`${ev.hora}-${idx}`} padding={12} radius={12} gap={4}>
+            <Fila>
+              <Text style={{ color: colors.BzText, fontSize: 12, fontWeight: '600' }}>{ev.hora}</Text>
+              <Text style={{ color: colors.BzMuted, fontSize: 11 }}>{ev.autorizo}</Text>
+            </Fila>
+            <Text style={{ color: colors.BzText, fontSize: 13 }}>{ev.descripcion}</Text>
+          </Tarjeta>
+        ))
+      )}
 
       <Text style={{ color: colors.BzMuted, fontSize: 11, textAlign: 'center', paddingTop: 6 }}>
         Los eventos no se pueden editar ni borrar
@@ -389,13 +412,14 @@ const VistaBitacora: React.FC<{ eventos: EventoAuditoria[]; onVolver: () => void
   );
 };
 
-/* ---------- Vista 15: Autorización con PIN ---------- */
+/* ---------- Autorización con PIN ---------- */
 
 const AutorizacionPinSheet: React.FC<{
+  usuarioNombre: string;
   pinEsperado: string;
   onAutorizado: () => void;
   onRechazar: () => void;
-}> = ({ pinEsperado, onAutorizado, onRechazar }) => {
+}> = ({ usuarioNombre, pinEsperado, onAutorizado, onRechazar }) => {
   const { colors } = useBzTheme();
   const [pin, setPin] = useState('');
   const [estado, setEstado] = useState<EstadoPin>(EstadoPin.NORMAL);
@@ -440,20 +464,20 @@ const AutorizacionPinSheet: React.FC<{
 
       <Tarjeta fondo="bg" padding={12} radius={12} gap={6} style={{ width: '100%' }}>
         <Fila>
-          <Text style={{ color: colors.BzMuted, fontSize: 12 }}>Solicita</Text>
-          <Text style={{ color: colors.BzText, fontSize: 12 }}>Ana M. (Caja)</Text>
+          <Text style={{ color: colors.BzMuted, fontSize: 12 }}>Autoriza</Text>
+          <Text style={{ color: colors.BzText, fontSize: 12 }}>{usuarioNombre}</Text>
         </Fila>
         <Fila>
           <Text style={{ color: colors.BzMuted, fontSize: 12 }}>Descuento</Text>
-          <Text style={{ color: colors.BzText, fontSize: 12, fontWeight: '600' }}>10 % · -$30</Text>
+          <Text style={{ color: colors.BzText, fontSize: 12, fontWeight: '600' }}>10 %</Text>
         </Fila>
         <Fila>
           <Text style={{ color: colors.BzMuted, fontSize: 12 }}>Motivo</Text>
-          <Text style={{ color: colors.BzText, fontSize: 12 }}>Cliente frecuente</Text>
+          <Text style={{ color: colors.BzText, fontSize: 12 }}>Autorización manual</Text>
         </Fila>
       </Tarjeta>
 
-      <Text style={{ color: colors.BzMuted, fontSize: 12 }}>Ingresa tu PIN (actual: {pinEsperado})</Text>
+      <Text style={{ color: colors.BzMuted, fontSize: 12 }}>Ingresa tu PIN de seguridad</Text>
       <CasillasPin pin={pin} estado={estado} />
 
       <View style={{ width: '100%', gap: 8 }}>

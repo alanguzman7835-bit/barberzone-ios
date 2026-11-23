@@ -13,6 +13,7 @@ import {
   type CitaEquipo,
 } from '../constants/AgendaTipos';
 import { useBzTheme } from '../constants/BzTheme';
+import { useCatalogoConfig } from '../constants/CatalogoConfigContext';
 import { UsuarioBz } from '../constants/Sesion';
 import {
   BotonPrimario,
@@ -85,32 +86,9 @@ const CATALOGO_SERVICIOS_CAJA: ServicioCatalogoCaja[] = [
   { id: 'srv-8', nombre: 'Tinte / Matizado de barba', duracion: '35 min', precio: 210 },
 ];
 
-const CATALOGO_TIENDA_CAJA: ProductoCatalogoCaja[] = [
-  { id: 'cr-1', codigoBarras: '7501001', nombre: 'Crema moldeadora mate', desc: '100g · Control natural', precio: 220 },
-  { id: 'cr-2', codigoBarras: '7501002', nombre: 'Crema hidratante rizos', desc: '150ml · Definición suave', precio: 240 },
-  { id: 'cr-3', codigoBarras: '7501003', nombre: 'Pomada base agua', desc: '100g · Fijación media', precio: 210 },
-  { id: 'cr-4', codigoBarras: '7501004', nombre: 'Crema para peinar fibra', desc: '120g · Textura flexible', precio: 230 },
-  { id: 'cr-5', codigoBarras: '7501005', nombre: 'Bálsamo crema post-afeitado', desc: '80ml · Calma e hidrata', precio: 195 },
-  { id: 'ba-1', codigoBarras: '7501006', nombre: 'Aceite para barba cedro', desc: '30ml · Aroma amaderado', precio: 185 },
-  { id: 'ba-2', codigoBarras: '7501007', nombre: 'Bálsamo acondicionador barba', desc: '60g · Domina vello', precio: 205 },
-  { id: 'ba-3', codigoBarras: '7501008', nombre: 'Aceite crecimiento romero', desc: '30ml · Fortalece folículo', precio: 250 },
-  { id: 'ba-4', codigoBarras: '7501009', nombre: 'Jabón exfoliante de barba', desc: '100g · Limpieza profunda', precio: 160 },
-  { id: 'ba-5', codigoBarras: '7501010', nombre: 'Kit aceite + peine madera', desc: 'Cuidado diario completo', precio: 310 },
-  { id: 'sh-1', codigoBarras: '7501011', nombre: 'Shampoo menta refrescante', desc: '250ml · Limpieza profunda', precio: 155 },
-  { id: 'sh-2', codigoBarras: '7501012', nombre: 'Shampoo carbón activado', desc: '250ml · Detox capilar', precio: 175 },
-  { id: 'sh-3', codigoBarras: '7501013', nombre: 'Shampoo anticaída biotina', desc: '300ml · Fortificante', precio: 235 },
-  { id: 'sh-4', codigoBarras: '7501014', nombre: 'Shampoo matizador plata', desc: '250ml · Matizador', precio: 225 },
-  { id: 'sh-5', codigoBarras: '7501015', nombre: 'Shampoo 2 en 1 diario', desc: '250ml · Cabello y barba', precio: 165 },
-  { id: 'ce-1', codigoBarras: '7501016', nombre: 'Cera arcilla ultra fuerte', desc: '100g · Acabado seco', precio: 215 },
-  { id: 'ce-2', codigoBarras: '7501017', nombre: 'Cera telaraña textura', desc: '100g · Despeinado flexible', precio: 205 },
-  { id: 'to-1', codigoBarras: '7501018', nombre: 'Tónico capilar mentolado', desc: '120ml · Estimula y refresca', precio: 165 },
-  { id: 'to-2', codigoBarras: '7501019', nombre: 'Spray sal marina volumen', desc: '150ml · Textura natural', precio: 190 },
-  { id: 'ac-1', codigoBarras: '7501020', nombre: 'Cepillo fade cerdas jabalí', desc: 'Limpieza en degradados', precio: 145 },
-  { id: 'ac-2', codigoBarras: '7501021', nombre: 'Peine carbono antiestática', desc: 'Corte fino profesional', precio: 110 },
-];
-
 export const CajaScreen: React.FC<{ usuario: UsuarioBz }> = ({ usuario }) => {
   const { colors } = useBzTheme();
+  const { productos } = useCatalogoConfig();
   const {
     citasEquipo,
     pedidosApartados,
@@ -120,10 +98,24 @@ export const CajaScreen: React.FC<{ usuario: UsuarioBz }> = ({ usuario }) => {
   } = useAgenda();
   const hoy = hoyISO();
 
+  const catalogoProductosReales = useMemo<ProductoCatalogoCaja[]>(
+    () =>
+      productos
+        .filter((p) => p.activo)
+        .map((p) => ({
+          id: p.id,
+          codigoBarras: p.id.slice(0, 8).toUpperCase(),
+          nombre: p.nombre,
+          desc: `${p.categoria} · Stock: ${p.stock}`,
+          precio: p.precio,
+        })),
+    [productos],
+  );
+
   const [tabPrincipal, setTabPrincipal] = useState<TabCajaPrincipal>('COBRO');
   const [subVista, setSubVista] = useState<SubVista>('POS');
   const [turnoAbierto, setTurnoAbierto] = useState(true);
-  const [fondoInicial, setFondoInicial] = useState(500);
+  const [fondoInicial, setFondoInicial] = useState(0);
 
   const clientesEnProceso = useMemo(
     () =>
@@ -140,34 +132,14 @@ export const CajaScreen: React.FC<{ usuario: UsuarioBz }> = ({ usuario }) => {
     [citasEquipo, hoy],
   );
 
-  // Clientes en espera que salieron a tomar un café o hacer un mandado
-  const [clientesEnEspera, setClientesEnEspera] = useState<ClienteEsperaCaja[]>([
-    {
-      id: 'esp-1',
-      nombre: 'Jovan Morales',
-      telefono: '33 1845 9210',
-      servicio: 'Corte + Barba',
-      tiempoEstMin: 35,
-      horaRegistro: '10:40 AM',
-      notificado: false,
-    },
-    {
-      id: 'esp-2',
-      nombre: 'Marta Domínguez',
-      telefono: '33 2910 4432',
-      servicio: 'Corte de pelo',
-      tiempoEstMin: 40,
-      horaRegistro: '10:52 AM',
-      notificado: false,
-    },
-  ]);
+  // Lista limpia en 0 (sin datos de demostración)
+  const [clientesEnEspera, setClientesEnEspera] = useState<ClienteEsperaCaja[]>([]);
   const [modalNuevaEsperaAbierto, setModalNuevaEsperaAbierto] = useState(false);
 
   const onNotificarLugarDisponible = (cliente: ClienteEsperaCaja) => {
     const ahora = new Date();
     const horaStr = ahora.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-    // TODO: Conectar aquí envío de notificación Push / WhatsApp al teléfono: cliente.telefono
     setClientesEnEspera((prev) =>
       prev.map((c) =>
         c.id === cliente.id
@@ -181,15 +153,10 @@ export const CajaScreen: React.FC<{ usuario: UsuarioBz }> = ({ usuario }) => {
     setClientesEnEspera((prev) => prev.filter((c) => c.id !== id));
   };
 
-  // null = Pantalla principal con feeds de clientes
-  // string = ID de la cita o 'MOSTRADOR' cuando entras al detalle de un cliente
   const [cuentaAbiertaKey, setCuentaAbiertaKey] = useState<string | null>(null);
-
-  // Guarda las líneas por cliente para que al entrar/salir no se pierda nada
   const [ordenesPorCliente, setOrdenesPorCliente] = useState<Record<string, LineaOrden[]>>({});
   const [propinasPorCliente, setPropinasPorCliente] = useState<Record<string, number>>({});
 
-  // Sincroniza el servicio base de cada cita en su orden si aún no existe
   useEffect(() => {
     setOrdenesPorCliente((prev) => {
       let cambio = false;
@@ -242,26 +209,22 @@ export const CajaScreen: React.FC<{ usuario: UsuarioBz }> = ({ usuario }) => {
   const totalOrden = subtotal + propinaMonto;
 
   const [metodoPago, setMetodoPago] = useState('Efectivo');
-  const [efectivoRecibido, setEfectivoRecibido] = useState('500');
-  const [ultimoFolio, setUltimoFolio] = useState('OLI-000124');
-  const [ultimoTotalCobrado, setUltimoTotalCobrado] = useState(242);
+  const [efectivoRecibido, setEfectivoRecibido] = useState('0');
+  const [ultimoFolio, setUltimoFolio] = useState('OLI-000001');
+  const [ultimoTotalCobrado, setUltimoTotalCobrado] = useState(0);
   const [ultimasLineasTicket, setUltimasLineasTicket] = useState<LineaOrden[]>([]);
   const [ultimoClienteTicket, setUltimoClienteTicket] = useState('');
   const [ultimoBarberoTicket, setUltimoBarberoTicket] = useState<string | undefined>(undefined);
   const [ultimoSubtotalTicket, setUltimoSubtotalTicket] = useState(0);
   const [ultimaPropinaTicket, setUltimaPropinaTicket] = useState(0);
 
-  const [totalEfectivo, setTotalEfectivo] = useState(2450);
-  const [totalTarjeta, setTotalTarjeta] = useState(3180);
-  const [totalTransferencia, setTotalTransferencia] = useState(640);
-  const [totalPropinas, setTotalPropinas] = useState(410);
-  const [totalGastos, setTotalGastos] = useState(150);
-
-  const [movimientos, setMovimientos] = useState<Movimiento[]>([
-    { desc: '13:20 Compra de insumos', monto: '-$150', esGasto: true },
-    { desc: '11:05 Cobro OLI-000122 · Sergio Vega', monto: '+$610', esGasto: false },
-    { desc: '10:45 Cobro OLI-000121 · Juan Pérez', monto: '+$250', esGasto: false },
-  ]);
+  // Totales del turno en 0
+  const [totalEfectivo, setTotalEfectivo] = useState(0);
+  const [totalTarjeta, setTotalTarjeta] = useState(0);
+  const [totalTransferencia, setTotalTransferencia] = useState(0);
+  const [totalPropinas, setTotalPropinas] = useState(0);
+  const [totalGastos, setTotalGastos] = useState(0);
+  const [movimientos, setMovimientos] = useState<Movimiento[]>([]);
 
   const [modalAgregarAbierto, setModalAgregarAbierto] = useState(false);
   const [pedidoEscaneando, setPedidoEscaneando] = useState<PedidoApartadoRegistro | null>(null);
@@ -345,7 +308,7 @@ export const CajaScreen: React.FC<{ usuario: UsuarioBz }> = ({ usuario }) => {
         onCambiarRecibido={setEfectivoRecibido}
         onVolver={() => setSubVista('POS')}
         onConfirmarPago={() => {
-          const folio = `OLI-000${124 + Math.floor(Math.random() * 876)}`;
+          const folio = `OLI-${String(ventasHoy.length + 1).padStart(6, '0')}`;
           setUltimoTotalCobrado(totalOrden);
           setUltimoFolio(folio);
           setUltimasLineasTicket([...lineasActuales]);
@@ -572,6 +535,7 @@ export const CajaScreen: React.FC<{ usuario: UsuarioBz }> = ({ usuario }) => {
         <FlujoAgregarConceptoSheet
           clienteNombre={clienteOrdenNombre}
           barberoNombre={barberoOrdenNombre}
+          productosCatalogo={catalogoProductosReales}
           onConfirmarConcepto={(concepto, detalle, tipo, precioUnitario, cantidad) => {
             agregarConceptoACuenta(concepto, detalle, tipo, precioUnitario, cantidad);
           }}
@@ -644,7 +608,7 @@ const VistaFeedsClientesCaja: React.FC<{
       contentContainerStyle={{ paddingHorizontal: 20, paddingVertical: 14, gap: 14, paddingBottom: 32 }}
       showsVerticalScrollIndicator={false}
     >
-      {/* Encabezado: Caja · Todas + Corte de caja */}
+      {/* Encabezado: Caja · Sucursal + Corte de caja */}
       <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
         <View style={{ flex: 1 }}>
           <Text style={{ color: colors.BzText, fontSize: 22, fontWeight: '700' }}>
@@ -711,7 +675,7 @@ const VistaFeedsClientesCaja: React.FC<{
         </Pressable>
       </View>
 
-      {/* Tarjeta(s) de clientes en atención estilo horizontal 3 columnas */}
+      {/* Tarjeta(s) de clientes en atención */}
       {clientesEnProceso.length === 0 ? (
         <Tarjeta padding={20} radius={16} gap={6}>
           <Text style={{ color: colors.BzText, fontSize: 15, fontWeight: '700' }}>
@@ -756,7 +720,6 @@ const VistaFeedsClientesCaja: React.FC<{
                   pressed && { opacity: 0.94 },
                 ]}
               >
-                {/* Fila superior del card: Badge estado + Hora */}
                 <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
                   <View
                     style={{
@@ -785,9 +748,7 @@ const VistaFeedsClientesCaja: React.FC<{
                   </Text>
                 </View>
 
-                {/* Cuerpo principal en 3 columnas (Cliente | Servicio + Agregar producto | Cuenta actual + Abrir cuenta) */}
                 <View style={styles.atencionBodyRow}>
-                  {/* Columna 1: Avatar circular + Nombre + Atiende */}
                   <View style={styles.atencionColCliente}>
                     <View
                       style={{
@@ -817,7 +778,6 @@ const VistaFeedsClientesCaja: React.FC<{
                     </View>
                   </View>
 
-                  {/* Columna 2: Servicio base + Subtexto + Pill "+ Agregar producto" */}
                   <View style={[styles.atencionColServicio, { borderLeftColor: colors.BzBorder }]}>
                     <Text style={{ color: colors.BzText, fontSize: 14, fontWeight: '700' }} numberOfLines={1}>
                       {cita.servicio}
@@ -850,7 +810,6 @@ const VistaFeedsClientesCaja: React.FC<{
                     </Pressable>
                   </View>
 
-                  {/* Columna 3: CUENTA ACTUAL $220 + Botón blanco "Abrir cuenta ›" */}
                   <View style={[styles.atencionColTotal, { borderLeftColor: colors.BzBorder }]}>
                     <View>
                       <Text
@@ -935,7 +894,7 @@ const VistaFeedsClientesCaja: React.FC<{
         </Pressable>
       </View>
 
-      {/* Tarjetas de clientes en espera en grid de 2 columnas */}
+      {/* Tarjetas de clientes en espera */}
       {clientesEnEspera.length === 0 ? (
         <Tarjeta padding={16} radius={14} gap={4}>
           <Text style={{ color: colors.BzText, fontSize: 14, fontWeight: '600' }}>
@@ -966,7 +925,6 @@ const VistaFeedsClientesCaja: React.FC<{
                   },
                 ]}
               >
-                {/* Fila superior: Pill ⏳ ESPERA ~35 MIN + Llegó 10:40 AM */}
                 <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
                   <View
                     style={{
@@ -997,7 +955,6 @@ const VistaFeedsClientesCaja: React.FC<{
                   </Text>
                 </View>
 
-                {/* Fila media: Círculo con iniciales + Nombre + Tel y Busca */}
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 2 }}>
                   <View
                     style={{
@@ -1027,7 +984,6 @@ const VistaFeedsClientesCaja: React.FC<{
                   </View>
                 </View>
 
-                {/* Fila inferior: Botón dorado ancho + botón oscuro "Ya pasó ✓" */}
                 <View style={{ flexDirection: 'row', gap: 10, marginTop: 4 }}>
                   <Pressable
                     onPress={() => onNotificarEspera(esp)}
@@ -1402,6 +1358,7 @@ const VistaDetalleClienteCaja: React.FC<{
 const FlujoAgregarConceptoSheet: React.FC<{
   clienteNombre: string;
   barberoNombre?: string;
+  productosCatalogo: ProductoCatalogoCaja[];
   onConfirmarConcepto: (
     concepto: string,
     detalle: string,
@@ -1410,7 +1367,7 @@ const FlujoAgregarConceptoSheet: React.FC<{
     cantidad: number,
   ) => void;
   onTerminarYVolverCuenta: () => void;
-}> = ({ clienteNombre, barberoNombre, onConfirmarConcepto, onTerminarYVolverCuenta }) => {
+}> = ({ clienteNombre, barberoNombre, productosCatalogo, onConfirmarConcepto, onTerminarYVolverCuenta }) => {
   const { colors } = useBzTheme();
   const [paso, setPaso] = useState<PasoModalAgregar>('ELEGIR_TIPO');
 
@@ -1421,14 +1378,14 @@ const FlujoAgregarConceptoSheet: React.FC<{
 
   const productosFiltrados = useMemo(() => {
     const q = busquedaProd.trim().toLowerCase();
-    if (!q) return CATALOGO_TIENDA_CAJA;
-    return CATALOGO_TIENDA_CAJA.filter(
+    if (!q) return productosCatalogo;
+    return productosCatalogo.filter(
       (p) =>
         p.nombre.toLowerCase().includes(q) ||
         p.codigoBarras.toLowerCase().includes(q) ||
         p.desc.toLowerCase().includes(q),
     );
-  }, [busquedaProd]);
+  }, [busquedaProd, productosCatalogo]);
 
   if (paso === 'ELEGIR_TIPO') {
     return (
@@ -1486,7 +1443,7 @@ const FlujoAgregarConceptoSheet: React.FC<{
             <Text style={{ fontSize: 28 }}>🧴</Text>
             <Text style={{ color: colors.BzText, fontSize: 16, fontWeight: '800' }}>Producto</Text>
             <Text style={{ color: colors.BzMuted, fontSize: 11, textAlign: 'center' }}>
-              Buscar por nombre o código de barras
+              Buscar por nombre o código
             </Text>
           </Pressable>
         </View>
@@ -1582,7 +1539,7 @@ const FlujoAgregarConceptoSheet: React.FC<{
           value={busquedaProd}
           onChangeText={(txt) => {
             setBusquedaProd(txt);
-            const matchCodigo = CATALOGO_TIENDA_CAJA.find(
+            const matchCodigo = productosCatalogo.find(
               (p) => p.codigoBarras.toLowerCase() === txt.trim().toLowerCase(),
             );
             if (matchCodigo) {
@@ -1590,7 +1547,7 @@ const FlujoAgregarConceptoSheet: React.FC<{
               setCantidadProd(1);
             }
           }}
-          placeholder="Nombre del producto o código de barras (ej. 7501001)..."
+          placeholder="Nombre del producto o código..."
           placeholderTextColor={colors.BzMuted}
           autoFocus
           style={[
@@ -1606,7 +1563,11 @@ const FlujoAgregarConceptoSheet: React.FC<{
         />
 
         <ScrollView style={{ maxHeight: productoSel ? 185 : 270 }} contentContainerStyle={{ gap: 8 }}>
-          {productosFiltrados.length === 0 ? (
+          {productosCatalogo.length === 0 ? (
+            <Text style={{ color: colors.BzMuted, fontSize: 13, textAlign: 'center', paddingVertical: 16 }}>
+              No hay productos registrados en el inventario todavía.
+            </Text>
+          ) : productosFiltrados.length === 0 ? (
             <Text style={{ color: colors.BzMuted, fontSize: 13, textAlign: 'center', paddingVertical: 16 }}>
               No se encontró ningún producto con "{busquedaProd}".
             </Text>
@@ -1636,7 +1597,7 @@ const FlujoAgregarConceptoSheet: React.FC<{
                       {prod.nombre}
                     </Text>
                     <Text style={{ color: colors.BzMuted, fontSize: 11, marginTop: 1 }}>
-                      Cód: {prod.codigoBarras} · {prod.desc}
+                      {prod.desc}
                     </Text>
                   </View>
                   <Text style={{ color: '#E2C46D', fontSize: 14, fontWeight: '800' }}>
@@ -1723,7 +1684,7 @@ const FlujoAgregarConceptoSheet: React.FC<{
               onPress={() => {
                 onConfirmarConcepto(
                   productoSel.nombre,
-                  `Cód. ${productoSel.codigoBarras}`,
+                  productoSel.desc,
                   'Producto',
                   productoSel.precio,
                   cantidadProd,
@@ -2353,14 +2314,12 @@ const VistaPago: React.FC<{
       }}
       showsVerticalScrollIndicator={false}
     >
-      {/* Enlace superior ‹ Volver */}
       <Pressable onPress={onVolver} hitSlop={8} style={{ alignSelf: 'flex-start' }}>
         <Text style={{ color: colors.BzMuted, fontSize: 13, fontWeight: '500' }}>
           ‹ Volver
         </Text>
       </Pressable>
 
-      {/* Título Cobro + Cliente */}
       <View style={{ gap: 2 }}>
         <Text style={{ color: colors.BzText, fontSize: 26, fontWeight: '800' }}>
           Cobro
@@ -2370,7 +2329,6 @@ const VistaPago: React.FC<{
         </Text>
       </View>
 
-      {/* Tarjeta de detalle (Conceptos + Barbero + Selector de Propina) */}
       <View
         style={{
           backgroundColor: colors.BzCard,
@@ -2405,7 +2363,6 @@ const VistaPago: React.FC<{
           </View>
         )}
 
-        {/* Fila de 4 chips de propina */}
         <View style={{ flexDirection: 'row', gap: 10, marginTop: 2 }}>
           {opcionesPropina.map((op) => {
             const activo = propinaPct === op.pct;
@@ -2439,7 +2396,6 @@ const VistaPago: React.FC<{
         </View>
       </View>
 
-      {/* Total a cobrar centrado */}
       <View style={{ alignItems: 'center', paddingVertical: 8, gap: 4 }}>
         <Text style={{ color: colors.BzMuted, fontSize: 13 }}>Total a cobrar</Text>
         <Text style={{ color: colors.BzText, fontSize: 46, fontWeight: '800', letterSpacing: -1 }}>
@@ -2447,7 +2403,6 @@ const VistaPago: React.FC<{
         </Text>
       </View>
 
-      {/* Segmentado de método de pago estilo cápsula con pill dorado */}
       <View
         style={{
           flexDirection: 'row',
@@ -2489,7 +2444,6 @@ const VistaPago: React.FC<{
 
       {metodo === 'Efectivo' ? (
         <>
-          {/* Tarjeta Recibido */}
           <View
             style={{
               flexDirection: 'row',
@@ -2522,7 +2476,6 @@ const VistaPago: React.FC<{
             </View>
           </View>
 
-          {/* 4 presets de billetes/exacto */}
           <View style={{ flexDirection: 'row', gap: 10 }}>
             {presets.map((p) => {
               const activo = recibido === p.valor;
@@ -2555,7 +2508,6 @@ const VistaPago: React.FC<{
             })}
           </View>
 
-          {/* Tarjeta Cambio */}
           <View
             style={{
               flexDirection: 'row',
@@ -2593,7 +2545,6 @@ const VistaPago: React.FC<{
         </View>
       )}
 
-      {/* Botón dorado inferior Confirmar pago · $total */}
       <Pressable
         disabled={pagoInvalido}
         onPress={onConfirmarPago}
@@ -2815,30 +2766,36 @@ const VistaCorteCaja: React.FC<{
 
       <Etiqueta texto={`VENTAS COBRADAS HOY (${ventasHoy.length})`} />
       <Tarjeta padding={12} radius={12} gap={10}>
-        {ventasHoy.map((venta, idx) => (
-          <View key={venta.id} style={{ gap: 6 }}>
-            {idx > 0 && <Divisor />}
-            <Fila>
-              <View style={{ flex: 1 }}>
-                <Text style={{ color: colors.BzText, fontSize: 13, fontWeight: '600' }}>
-                  {venta.hora} · {venta.clienteNombre}
+        {ventasHoy.length === 0 ? (
+          <Text style={{ color: colors.BzMuted, fontSize: 12 }}>
+            Sin ventas registradas en este turno.
+          </Text>
+        ) : (
+          ventasHoy.map((venta, idx) => (
+            <View key={venta.id} style={{ gap: 6 }}>
+              {idx > 0 && <Divisor />}
+              <Fila>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ color: colors.BzText, fontSize: 13, fontWeight: '600' }}>
+                    {venta.hora} · {venta.clienteNombre}
+                  </Text>
+                  <Text style={{ color: colors.BzMuted, fontSize: 11 }}>
+                    #{venta.folio} · {venta.metodoPago}
+                    {venta.barberoNombre ? ` · ${venta.barberoNombre}` : ''}
+                  </Text>
+                </View>
+                <Text style={{ color: colors.BzSuccess, fontSize: 14, fontWeight: '700' }}>
+                  +${venta.total}
                 </Text>
-                <Text style={{ color: colors.BzMuted, fontSize: 11 }}>
-                  #{venta.folio} · {venta.metodoPago}
-                  {venta.barberoNombre ? ` · ${venta.barberoNombre}` : ''}
+              </Fila>
+              {venta.conceptos.map((c, cIdx) => (
+                <Text key={cIdx} style={{ color: colors.BzMuted, fontSize: 11, paddingLeft: 6 }}>
+                  • [{c.tipo}] {c.nombre} (${c.precio})
                 </Text>
-              </View>
-              <Text style={{ color: colors.BzSuccess, fontSize: 14, fontWeight: '700' }}>
-                +${venta.total}
-              </Text>
-            </Fila>
-            {venta.conceptos.map((c, cIdx) => (
-              <Text key={cIdx} style={{ color: colors.BzMuted, fontSize: 11, paddingLeft: 6 }}>
-                • [{c.tipo}] {c.nombre} (${c.precio})
-              </Text>
-            ))}
-          </View>
-        ))}
+              ))}
+            </View>
+          ))
+        )}
       </Tarjeta>
 
       <Tarjeta padding={14} radius={12}>
@@ -2850,17 +2807,23 @@ const VistaCorteCaja: React.FC<{
 
       <Etiqueta texto="MOVIMIENTOS DE CAJA" />
       <Tarjeta padding={12} radius={12}>
-        {movimientos.map((m, idx) => (
-          <View key={idx} style={{ gap: 8 }}>
-            {idx > 0 && <Divisor />}
-            <Fila>
-              <Text style={{ color: colors.BzText, fontSize: 12, flex: 1 }}>{m.desc}</Text>
-              <Text style={{ color: m.esGasto ? colors.BzDanger : colors.BzSuccess, fontSize: 12, fontWeight: '500' }}>
-                {m.monto}
-              </Text>
-            </Fila>
-          </View>
-        ))}
+        {movimientos.length === 0 ? (
+          <Text style={{ color: colors.BzMuted, fontSize: 12 }}>
+            Sin movimientos registrados aún.
+          </Text>
+        ) : (
+          movimientos.map((m, idx) => (
+            <View key={idx} style={{ gap: 8 }}>
+              {idx > 0 && <Divisor />}
+              <Fila>
+                <Text style={{ color: colors.BzText, fontSize: 12, flex: 1 }}>{m.desc}</Text>
+                <Text style={{ color: m.esGasto ? colors.BzDanger : colors.BzSuccess, fontSize: 12, fontWeight: '500' }}>
+                  {m.monto}
+                </Text>
+              </Fila>
+            </View>
+          ))
+        )}
       </Tarjeta>
 
       <BotonSecundario texto="+ Registrar gasto ($100)" onPress={onAgregarGasto} />

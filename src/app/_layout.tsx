@@ -4,10 +4,10 @@ import { CatalogoConfigProvider } from '../constants/CatalogoConfigContext';
 
 export default function RootLayout() {
   return (
-    <HorariosProvider>
-      <CatalogoConfigProvider>
+    <CatalogoConfigProvider>
+      <HorariosProvider>
         <Stack screenOptions={{ headerShown: false }} />
-      </CatalogoConfigProvider>
-    </HorariosProvider>
+      </HorariosProvider>
+    </CatalogoConfigProvider>
   );
 }

@@ -14,6 +14,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle, Line, Path } from 'react-native-svg';
 
 import { BzTypography, useBzTheme } from '../constants/BzTheme';
+import { useCatalogoConfig, type ProductoDB } from '../constants/CatalogoConfigContext';
 import ComprobantePedidoCard from './ComprobantePedidoCard';
 import type { LineaPedido, PedidoApartadoData } from './VistaAgendarCliente';
 import VistaDetalleProducto, {
@@ -44,7 +45,7 @@ type Props = {
 };
 
 /* =====================================================================
-   Catálogo base
+   Categorías visuales
    ===================================================================== */
 
 const CATEGORIAS_VISUALES: CategoriaVisual[] = [
@@ -56,225 +57,29 @@ const CATEGORIAS_VISUALES: CategoriaVisual[] = [
   { id: 'accesorios', nombre: 'Equipo' },
 ];
 
-const PRODUCTOS_CATALOGO: ProductoTiendaItem[] = [
-  // 1. Cremas y pomadas
-  {
-    id: 'cr-1',
-    nombre: 'Crema moldeadora mate',
-    desc: 'Control natural sin brillo · 100g',
-    detalleLargo: 'Fórmula ligera a base de agua que aporta textura y fijación media durante todo el día sin dejar residuos blancos ni sensación grasosa.',
-    precio: 220,
-    categoria: 'cremas',
-    ventas: 98,
-    disponible: true,
-  },
-  {
-    id: 'cr-2',
-    nombre: 'Crema hidratante rizos',
-    desc: 'Definición suave sin frizz · 150ml',
-    detalleLargo: 'Enriquecida con aceites naturales para definir ondas y rizos manteniendo el movimiento natural y la hidratación del cabello.',
-    precio: 240,
-    categoria: 'cremas',
-    ventas: 87,
-    disponible: true,
-  },
-  {
-    id: 'cr-3',
-    nombre: 'Pomada base agua',
-    desc: 'Fijación media y lavado fácil · 100g',
-    detalleLargo: 'Ideal para peinados clásicos, side part o slick back. Se retira fácilmente solo con agua tibia sin maltratar el cuero cabelludo.',
-    precio: 210,
-    categoria: 'cremas',
-    ventas: 81,
-    disponible: true,
-  },
-  {
-    id: 'cr-4',
-    nombre: 'Crema para peinar fibra',
-    desc: 'Textura flexible todo el día · 120g',
-    detalleLargo: 'Microfibras elásticas que engrosan visualmente el cabello fino y permiten remodelar el peinado en cualquier momento.',
-    precio: 230,
-    categoria: 'cremas',
-    ventas: 74,
-    disponible: true,
-  },
-  {
-    id: 'cr-5',
-    nombre: 'Bálsamo crema post-afeitado',
-    desc: 'Calma e hidrata al instante · 80ml',
-    detalleLargo: 'Alivia la irritación tras el paso de la navaja, cierra los poros y deja una sensación fresca con notas de sándalo y menta.',
-    precio: 195,
-    categoria: 'cremas',
-    ventas: 69,
-    disponible: true,
-  },
+function mapearCategoriaId(catTexto: string): CategoriaId {
+  const c = catTexto.toLowerCase();
+  if (c.includes('crema') || c.includes('pomada') || c.includes('peinado')) return 'cremas';
+  if (c.includes('barba') || c.includes('aceite')) return 'barba';
+  if (c.includes('shampoo') || c.includes('capilar')) return 'shampoo';
+  if (c.includes('cera')) return 'ceras';
+  if (c.includes('tonic') || c.includes('tónic') || c.includes('spray')) return 'tonicos';
+  return 'accesorios';
+}
 
-  // 2. Barba y aceites
-  {
-    id: 'ba-1',
-    nombre: 'Aceite para barba cedro',
-    desc: 'Suavidad y aroma amaderado · 30ml',
-    detalleLargo: 'Mezcla prensada en frío de jojoba, argán y almendras dulces que suaviza el vello grueso y elimina la comezón.',
-    precio: 185,
-    categoria: 'barba',
-    ventas: 95,
-    disponible: true,
-  },
-  {
-    id: 'ba-2',
-    nombre: 'Bálsamo acondicionador barba',
-    desc: 'Domina vello rebelde · 60g',
-    detalleLargo: 'Con manteca de karité y cera de abeja para dar forma, hidratar y mantener la barba perfilada todo el día.',
-    precio: 205,
-    categoria: 'barba',
-    ventas: 84,
-    disponible: true,
-  },
-  {
-    id: 'ba-3',
-    nombre: 'Aceite crecimiento romero',
-    desc: 'Fortalece el folículo · 30ml',
-    detalleLargo: 'Extracto concentrado de romero y vitamina E diseñado para estimular zonas poco pobladas y fortalecer la raíz.',
-    precio: 250,
-    categoria: 'barba',
-    ventas: 79,
-    disponible: true,
-  },
-  {
-    id: 'ba-4',
-    nombre: 'Jabón exfoliante de barba',
-    desc: 'Limpieza profunda sin resecar · 100g',
-    detalleLargo: 'Elimina células muertas e impurezas acumuladas debajo de la barba sin retirar los aceites naturales de la piel.',
-    precio: 160,
-    categoria: 'barba',
-    ventas: 68,
-    disponible: true,
-  },
-  {
-    id: 'ba-5',
-    nombre: 'Kit aceite + peine madera',
-    desc: 'Cuidado diario completo',
-    detalleLargo: 'Incluye aceite hidratante de 30ml y peine antiestático de madera de peral para distribuir el producto de raíz a punta.',
-    precio: 310,
-    categoria: 'barba',
-    ventas: 63,
-    disponible: true,
-  },
-
-  // 3. Shampoos
-  {
-    id: 'sh-1',
-    nombre: 'Shampoo menta refrescante',
-    desc: 'Limpieza profunda · 250ml',
-    detalleLargo: 'Aceite esencial de menta piperita que activa la circulación, refresca al instante y limpia residuos de cera o pomada.',
-    precio: 155,
-    categoria: 'shampoo',
-    ventas: 92,
-    disponible: true,
-  },
-  {
-    id: 'sh-2',
-    nombre: 'Shampoo carbón activado',
-    desc: 'Detox cuero cabelludo · 250ml',
-    detalleLargo: 'Purifica el exceso de grasa y contaminación ambiental dejando el cabello ligero, suelto y con brillo saludable.',
-    precio: 175,
-    categoria: 'shampoo',
-    ventas: 83,
-    disponible: true,
-  },
-  {
-    id: 'sh-3',
-    nombre: 'Shampoo anticaída biotina',
-    desc: 'Fortalece desde la raíz · 300ml',
-    detalleLargo: 'Fórmula fortificante con biotina y cafeína que reduce el quiebre y aporta mayor densidad con el uso diario.',
-    precio: 235,
-    categoria: 'shampoo',
-    ventas: 77,
-    disponible: true,
-  },
-  {
-    id: 'sh-4',
-    nombre: 'Shampoo matizador plata',
-    desc: 'Neutraliza tonos amarillos · 250ml',
-    detalleLargo: 'Pigmentos violetas equilibrados para mantener tonos platinados, cenizos y canas limpias sin resecar.',
-    precio: 225,
-    categoria: 'shampoo',
-    ventas: 70,
-    disponible: true,
-  },
-  {
-    id: 'sh-5',
-    nombre: 'Shampoo 2 en 1 diario',
-    desc: 'Cabello y barba suave · 250ml',
-    detalleLargo: 'Práctico limpiador equilibrado para usar todos los días en cabello y barba con acondicionador ligero integrado.',
-    precio: 165,
-    categoria: 'shampoo',
-    ventas: 64,
-    disponible: true,
-  },
-
-  // Ceras, Tónicos y Equipo
-  {
-    id: 'ce-1',
-    nombre: 'Cera arcilla ultra fuerte',
-    desc: 'Acabado seco de larga duración · 100g',
-    detalleLargo: 'Arcilla natural de caolín para peinados con mucho volumen, separación marcada y cero brillo.',
-    precio: 215,
-    categoria: 'ceras',
-    ventas: 88,
-    disponible: true,
-  },
-  {
-    id: 'ce-2',
-    nombre: 'Cera telaraña textura',
-    desc: 'Efecto despeinado flexible · 100g',
-    detalleLargo: 'Se activa frotando entre las palmas para crear una red elástica que da movimiento y fijación duradera.',
-    precio: 205,
-    categoria: 'ceras',
-    ventas: 71,
-    disponible: true,
-  },
-  {
-    id: 'to-1',
-    nombre: 'Tónico capilar mentolado',
-    desc: 'Estimula y refresca · 120ml',
-    detalleLargo: 'Loción revitalizante para aplicar con masaje después del baño o antes de secar el cabello.',
-    precio: 165,
-    categoria: 'tonicos',
-    ventas: 85,
-    disponible: true,
-  },
-  {
-    id: 'to-2',
-    nombre: 'Spray sal marina volumen',
-    desc: 'Textura playera natural · 150ml',
-    detalleLargo: 'Aporta cuerpo y agarre ligero como pre-styler antes de usar secadora o cera.',
-    precio: 190,
-    categoria: 'tonicos',
-    ventas: 76,
-    disponible: true,
-  },
-  {
-    id: 'ac-1',
-    nombre: 'Cepillo fade cerdas jabalí',
-    desc: 'Limpieza de precisión en degradados',
-    detalleLargo: 'Mango ergonómico de madera y cerdas naturales firmes para limpiar y pulir cortes fade y barba.',
-    precio: 145,
-    categoria: 'accesorios',
-    ventas: 82,
-    disponible: true,
-  },
-  {
-    id: 'ac-2',
-    nombre: 'Peine carbono antiestática',
-    desc: 'Resistente al calor y corte fino',
-    detalleLargo: 'Fibra de carbono ultraligera que evita el frizz por estática y soporta altas temperaturas.',
-    precio: 110,
-    categoria: 'accesorios',
-    ventas: 73,
-    disponible: true,
-  },
-];
+function convertirProductoDB(p: ProductoDB): ProductoTiendaItem {
+  return {
+    id: p.id,
+    nombre: p.nombre,
+    desc: `${p.categoria} · ${p.stock} disponibles`,
+    detalleLargo: `Producto disponible en sucursal ${p.sucursal}. Existencia actual: ${p.stock} unidades listas para recoger.`,
+    precio: p.precio,
+    categoria: mapearCategoriaId(p.categoria),
+    imagen: p.imagenUrl ? { uri: p.imagenUrl } : undefined,
+    ventas: 50,
+    disponible: p.activo && p.stock > 0,
+  };
+}
 
 /* =====================================================================
    Componente principal: VistaTiendaCliente
@@ -291,6 +96,7 @@ export function VistaTiendaCliente({
   aplicarSafeArea = false,
 }: Props) {
   const { colors } = useBzTheme();
+  const { productos, obtenerImagenSeccion } = useCatalogoConfig();
   const insets = useSafeAreaInsets();
   const topSeguro = (aplicarSafeArea ? insets.top : 0) + 12;
 
@@ -301,42 +107,31 @@ export function VistaTiendaCliente({
   const [folioRecienApartado, setFolioRecienApartado] = useState<string | null>(null);
   const [ticketGenerado, setTicketGenerado] = useState<PedidoApartadoData | null>(null);
 
+  const imagenPortadaTienda = obtenerImagenSeccion('TIENDA_PORTADA');
+
+  // Solo productos reales agregados por el dueño que estén activos
+  const catalogoReal = useMemo(
+    () => productos.filter((p) => p.activo).map(convertirProductoDB),
+    [productos],
+  );
+
   const cantidadEnBolsa = (id: string) => bolsa.find((l) => l.id === id)?.cantidad ?? 0;
   const totalArticulos = useMemo(() => bolsa.reduce((s, l) => s + l.cantidad, 0), [bolsa]);
   const totalPagar = useMemo(() => bolsa.reduce((s, l) => s + l.precio * l.cantidad, 0), [bolsa]);
 
-  // 3 filas deslizables con los 5 productos más vendidos de 3 categorías distintas
-  const filasTop5 = useMemo(() => {
-    const categoriasFila: { id: CategoriaId; titulo: string }[] = [
-      { id: 'cremas', titulo: 'Top 5 · Cremas y pomadas' },
-      { id: 'barba', titulo: 'Top 5 · Barba y aceites' },
-      { id: 'shampoo', titulo: 'Top 5 · Shampoos' },
-    ];
-    return categoriasFila.map((cat) => ({
-      ...cat,
-      items: PRODUCTOS_CATALOGO.filter((p) => p.categoria === cat.id)
-        .sort((a, b) => b.ventas - a.ventas)
-        .slice(0, 5),
-    }));
-  }, []);
-
-  // Mix intercalado de todas las categorías para la cuadrícula inferior
-  const mixProductos = useMemo(() => {
-    const orden: CategoriaId[] = ['cremas', 'barba', 'shampoo', 'ceras', 'tonicos', 'accesorios'];
-    const resultado: ProductoTiendaItem[] = [];
-    for (let ronda = 0; ronda < 3; ronda++) {
-      orden.forEach((cat) => {
-        const items = PRODUCTOS_CATALOGO.filter((p) => p.categoria === cat);
-        if (items[ronda]) resultado.push(items[ronda]);
-      });
-    }
-    return resultado;
-  }, []);
+  // Filas por categoría (solo muestra las categorías que ya tengan productos reales)
+  const filasPorCategoria = useMemo(() => {
+    return CATEGORIAS_VISUALES.map((cat) => ({
+      id: cat.id,
+      titulo: cat.nombre,
+      items: catalogoReal.filter((p) => p.categoria === cat.id),
+    })).filter((fila) => fila.items.length > 0);
+  }, [catalogoReal]);
 
   // Lista filtrada cuando el usuario escribe en búsqueda o toca un círculo de categoría
   const productosFiltrados = useMemo(() => {
     const q = busqueda.trim().toLowerCase();
-    return PRODUCTOS_CATALOGO.filter((p) => {
+    return catalogoReal.filter((p) => {
       if (categoriaActiva && p.categoria !== categoriaActiva) return false;
       if (!q) return true;
       return (
@@ -345,7 +140,7 @@ export function VistaTiendaCliente({
         p.categoria.toLowerCase().includes(q)
       );
     });
-  }, [busqueda, categoriaActiva]);
+  }, [catalogoReal, busqueda, categoriaActiva]);
 
   const mostrandoFiltro = !!categoriaActiva || busqueda.trim().length > 0;
   const nombreCategoriaActiva =
@@ -588,9 +383,9 @@ export function VistaTiendaCliente({
   if (productoDetalle) {
     const catNombre =
       CATEGORIAS_VISUALES.find((c) => c.id === productoDetalle.categoria)?.nombre ?? 'Catálogo';
-    const relacionados = PRODUCTOS_CATALOGO.filter(
-      (p) => p.categoria === productoDetalle.categoria && p.id !== productoDetalle.id,
-    ).slice(0, 4);
+    const relacionados = catalogoReal
+      .filter((p) => p.categoria === productoDetalle.categoria && p.id !== productoDetalle.id)
+      .slice(0, 4);
 
     return (
       <>
@@ -633,7 +428,7 @@ export function VistaTiendaCliente({
             <TextInput
               value={busqueda}
               onChangeText={setBusqueda}
-              placeholder="Buscar cremas, aceites, shampoo..."
+              placeholder="Buscar productos..."
               placeholderTextColor={colors.BzMuted}
               style={[styles.searchInput, { color: colors.BzText }]}
             />
@@ -678,6 +473,23 @@ export function VistaTiendaCliente({
           </Pressable>
         </View>
 
+        {/* Portada editable por el dueño */}
+        {!!imagenPortadaTienda && (
+          <View style={{ paddingHorizontal: 20, marginBottom: 14 }}>
+            <Image
+              source={{ uri: imagenPortadaTienda }}
+              resizeMode="cover"
+              style={{
+                width: '100%',
+                height: 130,
+                borderRadius: 16,
+                borderWidth: 1,
+                borderColor: colors.BzBorder,
+              }}
+            />
+          </View>
+        )}
+
         {/* Confirmación rápida si acaba de apartar un pedido */}
         {folioRecienApartado && (
           <View
@@ -700,7 +512,7 @@ export function VistaTiendaCliente({
           </View>
         )}
 
-        {/* 2. CÍRCULOS DE IMAGEN (CÍRCULO "TODO" + CATEGORÍAS VISUALES) */}
+        {/* 2. CÍRCULOS DE CATEGORÍAS */}
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -764,8 +576,19 @@ export function VistaTiendaCliente({
           })}
         </ScrollView>
 
-        {/* 3. CATÁLOGO FILTRADO O CARRUSELES + MIX */}
-        {mostrandoFiltro ? (
+        {/* 3. CATÁLOGO REAL O ESTADO VACÍO */}
+        {catalogoReal.length === 0 ? (
+          <View style={{ paddingHorizontal: 20, marginTop: 24 }}>
+            <View style={[styles.vacioCard, { backgroundColor: colors.BzCard, borderColor: colors.BzBorder }]}>
+              <Text style={{ color: colors.BzText, fontSize: 15, fontWeight: '600' }}>
+                Aún no hay productos disponibles
+              </Text>
+              <Text style={{ color: colors.BzMuted, fontSize: 12, marginTop: 6, textAlign: 'center' }}>
+                Pronto agregaremos nuevos productos a la tienda de {sucursalNombre}.
+              </Text>
+            </View>
+          </View>
+        ) : mostrandoFiltro ? (
           <View style={{ paddingHorizontal: 20, marginTop: 8 }}>
             <View style={styles.filtroHeader}>
               <View>
@@ -804,7 +627,7 @@ export function VistaTiendaCliente({
           </View>
         ) : (
           <>
-            {filasTop5.map((fila) => (
+            {filasPorCategoria.map((fila) => (
               <View key={fila.id} style={{ marginTop: 18 }}>
                 <View style={styles.seccionHeader}>
                   <Text style={{ color: colors.BzText, fontSize: 15, fontWeight: '600' }}>
@@ -828,13 +651,13 @@ export function VistaTiendaCliente({
             ))}
 
             <View style={{ paddingHorizontal: 20, marginTop: 24 }}>
-              <Text style={[BzTypography.label, { color: colors.BzMuted }]}>EXPLORA MÁS</Text>
+              <Text style={[BzTypography.label, { color: colors.BzMuted }]}>CATÁLOGO COMPLETO</Text>
               <Text style={{ color: colors.BzText, fontSize: 17, fontWeight: '600', marginTop: 2, marginBottom: 12 }}>
-                Mix de productos
+                Todos los productos ({catalogoReal.length})
               </Text>
 
               <View style={styles.gridMix}>
-                {mixProductos.map((prod) =>
+                {catalogoReal.map((prod) =>
                   renderTarjetaProducto(prod, { width: '48.2%' }),
                 )}
               </View>

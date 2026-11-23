@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   AccessibilityInfo,
   Animated,
@@ -32,6 +32,7 @@ import Svg, {
 } from 'react-native-svg';
 
 import { useBzTheme } from '../constants/BzTheme';
+import { useCatalogoConfig } from '../constants/CatalogoConfigContext';
 import {
   ComprobanteCitaCard,
   type CitaConfirmadaData,
@@ -218,46 +219,12 @@ type Props = {
   espacioInferior?: number;
 };
 
-/* ---------- Datos de ejemplo ---------- */
+/* ---------- Datos base ---------- */
 
 const SUCURSALES_DEMO: SucursalItem[] = [
   { id: 'suc-1', nombre: 'Sucursal Olivete', direccion: 'Av. Olivete 240, Centro' },
   { id: 'suc-2', nombre: 'Sucursal Providencia', direccion: 'Calle Rubén Darío 1120' },
   { id: 'suc-3', nombre: 'Sucursal Tonalá', direccion: 'Av. Tonaltecas 85, Zona Centro' },
-];
-
-const PROMOS_DEMO: PromoItem[] = [
-  {
-    id: 'promo-1',
-    titulo: 'Crema para pelo',
-    descripcion: '',
-    imagen: BannerBarberZoneImg,
-  },
-  {
-    id: 'promo-2',
-    titulo: 'Kit de barba',
-    descripcion: 'Aceite + bálsamo + peine de madera para el cuidado diario.',
-    precio: 320,
-    precioAnterior: 400,
-    etiqueta: '-20 %',
-  },
-  {
-    id: 'promo-3',
-    titulo: 'Shampoo + tónico',
-    descripcion: 'Rutina completa post-corte con un precio especial.',
-    precio: 270,
-    precioAnterior: 315,
-    etiqueta: '-15 %',
-  },
-];
-
-const PRODUCTOS_DEMO: ProductoItem[] = [
-  { id: 'p1', nombre: 'Pomada mate', precio: 220 },
-  { id: 'p2', nombre: 'Aceite para barba', precio: 180 },
-  { id: 'p3', nombre: 'Shampoo diario', precio: 150 },
-  { id: 'p4', nombre: 'Cera fuerte', precio: 210 },
-  { id: 'p5', nombre: 'Tónico capilar', precio: 165 },
-  { id: 'p6', nombre: 'Bálsamo hidratante', precio: 195 },
 ];
 
 const NOTICIAS_DEMO: NoticiaItem[] = [
@@ -794,8 +761,8 @@ export function VistaInicioCliente({
   onAgregarProducto,
   onVerPromo,
   onVerProducto,
-  promociones = PROMOS_DEMO,
-  productos = PRODUCTOS_DEMO,
+  promociones,
+  productos,
   noticias = NOTICIAS_DEMO,
   instagramUrl = 'https://www.instagram.com/',
   instagramUsuario = '@barberzone.mx',
@@ -804,6 +771,7 @@ export function VistaInicioCliente({
   espacioInferior = 36,
 }: Props) {
   const { colors } = useBzTheme();
+ const { obtenerImagenSeccion, productos: productosDB, slidesHero } = useCatalogoConfig();
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const [area, setArea] = useState<{ w: number; h: number } | null>(null);
@@ -816,6 +784,46 @@ export function VistaInicioCliente({
   const [preguntaAbierta, setPreguntaAbierta] = useState<string | null>(
     preguntas[0]?.id ?? null,
   );
+
+  // Imágenes editables en tiempo real desde el panel del Dueño
+  const urlHeroCliente = obtenerImagenSeccion('HERO_CLIENTE');
+  const urlPromoBanner = obtenerImagenSeccion('PROMO_BANNER');
+  const urlLealtadFondo = obtenerImagenSeccion('LEALTAD_FONDO');
+
+  // Carrusel hero sincronizado con las imágenes que el dueño configure
+ // 2. En listaPromos:
+const listaPromos = useMemo<PromoItem[]>(() => {
+  if (promociones && promociones.length > 0) return promociones;
+  if (slidesHero && slidesHero.length > 0) {
+    return slidesHero.map((s) => ({
+      id: s.id,
+      titulo: s.titulo,
+      descripcion: '',
+      imagen: s.imagenUrl ? { uri: s.imagenUrl } : BannerBarberZoneImg,
+    }));
+  }
+  return [
+    {
+      id: 'promo-default',
+      titulo: 'Explorar catálogo',
+      descripcion: '',
+      imagen: BannerBarberZoneImg,
+    },
+  ];
+}, [promociones, slidesHero]);
+
+  // Productos reales agregados por el dueño en la base de datos
+  const listaProductos = useMemo<ProductoItem[]>(() => {
+    if (productos && productos.length > 0) return productos;
+    return productosDB
+      .filter((p) => p.activo)
+      .map((p) => ({
+        id: p.id,
+        nombre: p.nombre,
+        precio: p.precio,
+        imagen: p.imagenUrl ? { uri: p.imagenUrl } : undefined,
+      }));
+  }, [productos, productosDB]);
 
   const idActual = sucursalActivaId ?? sucursalInternaId;
   const sucursalActual =
@@ -844,18 +852,18 @@ export function VistaInicioCliente({
   };
 
   useEffect(() => {
-    if (promociones.length < 2) return;
+    if (listaPromos.length < 2) return;
     const id = setInterval(() => {
       if (arrastrando.current) return;
-      irA((indiceRef.current + 1) % promociones.length);
+      irA((indiceRef.current + 1) % listaPromos.length);
     }, INTERVALO_MS);
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [promociones.length, reinicio, paso]);
+  }, [listaPromos.length, reinicio, paso]);
 
   const alTerminarDeslizar = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
     const i = Math.round(e.nativeEvent.contentOffset.x / paso);
-    const limpio = Math.max(0, Math.min(promociones.length - 1, i));
+    const limpio = Math.max(0, Math.min(listaPromos.length - 1, i));
     indiceRef.current = limpio;
     setIndice(limpio);
   };
@@ -927,11 +935,11 @@ export function VistaInicioCliente({
           <View style={styles.topBarSpacer} />
         </View>
 
-        {/* 1. Carrusel hero superior */}
+        {/* 1. Carrusel hero superior (imágenes/GIFs editables por el dueño) */}
         <View>
           <FlatList
             ref={listaRef}
-            data={promociones}
+            data={listaPromos}
             keyExtractor={(p) => p.id}
             horizontal
             showsHorizontalScrollIndicator={false}
@@ -961,9 +969,9 @@ export function VistaInicioCliente({
         </View>
 
         {/* Indicadores de página */}
-        {promociones.length > 1 && (
+        {listaPromos.length > 1 && (
           <View style={styles.puntos} accessibilityElementsHidden>
-            {promociones.map((p, i) => (
+            {listaPromos.map((p, i) => (
               <Pressable key={p.id} onPress={() => irA(i)} hitSlop={6}>
                 <View
                   style={[
@@ -1047,7 +1055,7 @@ export function VistaInicioCliente({
           </Pressable>
         )}
 
-        {/* 3. Tienda BarberZone */}
+        {/* 3. Tienda BarberZone (solo productos reales agregados por el dueño) */}
         <View style={[styles.encabezado, { marginHorizontal: MARGEN }]}>
           <Text style={[styles.encabezadoTitulo, { color: colors.BzMuted }]}>TIENDA BARBERZONE</Text>
           <Pressable onPress={onIrTienda} hitSlop={8}>
@@ -1055,17 +1063,38 @@ export function VistaInicioCliente({
           </Pressable>
         </View>
 
-        <View style={[styles.cuadricula, { paddingHorizontal: MARGEN }]}>
-          {productos.slice(0, 6).map((p) => (
-            <ProductoCard
-              key={p.id}
-              item={p}
-              ancho={anchoProducto}
-              onPress={() => (onVerProducto ? onVerProducto(p) : onIrTienda())}
-              onAgregar={() => onAgregarProducto(p)}
-            />
-          ))}
-        </View>
+        {listaProductos.length === 0 ? (
+          <View
+            style={{
+              marginHorizontal: MARGEN,
+              padding: 20,
+              borderRadius: 18,
+              backgroundColor: colors.BzCard,
+              borderWidth: 1,
+              borderColor: colors.BzBorder,
+              alignItems: 'center',
+            }}
+          >
+            <Text style={{ color: colors.BzText, fontSize: 14, fontWeight: '600' }}>
+              Catálogo en preparación
+            </Text>
+            <Text style={{ color: colors.BzMuted, fontSize: 12, marginTop: 4, textAlign: 'center' }}>
+              Pronto verás aquí los productos disponibles en sucursal.
+            </Text>
+          </View>
+        ) : (
+          <View style={[styles.cuadricula, { paddingHorizontal: MARGEN }]}>
+            {listaProductos.slice(0, 6).map((p) => (
+              <ProductoCard
+                key={p.id}
+                item={p}
+                ancho={anchoProducto}
+                onPress={() => (onVerProducto ? onVerProducto(p) : onIrTienda())}
+                onAgregar={() => onAgregarProducto(p)}
+              />
+            ))}
+          </View>
+        )}
 
         <Pressable
           onPress={onIrTienda}
@@ -1084,6 +1113,23 @@ export function VistaInicioCliente({
           </Text>
           <Icono nombre="flecha" size={15} color={colors.BzText} />
         </Pressable>
+
+        {/* Banner visual editable (Lealtad / Comunidad) */}
+        {!!urlLealtadFondo && (
+          <View style={{ paddingHorizontal: MARGEN, marginTop: 22 }}>
+            <Image
+              source={{ uri: urlLealtadFondo }}
+              resizeMode="cover"
+              style={{
+                width: '100%',
+                height: 130,
+                borderRadius: 18,
+                borderWidth: 1,
+                borderColor: colors.BzBorder,
+              }}
+            />
+          </View>
+        )}
 
         {/* 4. Noticias y Novedades ligadas a Instagram */}
         <View style={[styles.encabezado, { marginHorizontal: MARGEN }]}>
@@ -1380,7 +1426,6 @@ export function VistaInicioCliente({
 /* ---------- Estilos ---------- */
 
 const styles = StyleSheet.create({
-  /* barra superior: perfil izquierda + sucursal centro */
   topBar: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1421,7 +1466,6 @@ const styles = StyleSheet.create({
     height: 40,
   },
 
-  /* bottom sheets */
   modalBackdrop: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.6)',
@@ -1505,7 +1549,6 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
 
-  /* promo */
   promo: {
     minHeight: 196,
     borderRadius: 24,
@@ -1552,7 +1595,6 @@ const styles = StyleSheet.create({
   chipTexto: { fontSize: 11, fontWeight: '600' },
   verTienda: { fontSize: 12, fontWeight: '500' },
 
-  /* burbuja del carrito */
   burbujaWrap: {
     position: 'absolute',
     top: 0,
@@ -1587,7 +1629,6 @@ const styles = StyleSheet.create({
   },
   badgeTexto: { color: '#FFFFFF', fontSize: 10, fontWeight: '700' },
 
-  /* puntos */
   puntos: {
     flexDirection: 'row',
     justifyContent: 'center',
@@ -1598,7 +1639,6 @@ const styles = StyleSheet.create({
   },
   punto: { height: 6, borderRadius: 3 },
 
-  /* banner agendar */
   banner: {
     borderRadius: 20,
     padding: 16,
@@ -1623,7 +1663,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
 
-  /* tarjeta pase en inicio */
   paseInicioCard: {
     marginTop: 10,
     borderRadius: 18,
@@ -1646,7 +1685,6 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
 
-  /* encabezados de sección */
   encabezado: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1656,7 +1694,6 @@ const styles = StyleSheet.create({
   },
   encabezadoTitulo: { fontSize: 10, letterSpacing: 1.8, fontWeight: '500' },
 
-  /* productos */
   cuadricula: { flexDirection: 'row', flexWrap: 'wrap', gap: GAP },
   producto: { borderRadius: 18, borderWidth: 1, padding: 10 },
   productoImagen: {
@@ -1691,7 +1728,6 @@ const styles = StyleSheet.create({
     gap: 8,
   },
 
-  /* noticias Instagram */
   noticiaCard: {
     borderRadius: 20,
     borderWidth: 1,
@@ -1734,7 +1770,6 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
 
-  /* preguntas frecuentes */
   faqContenedor: {
     borderRadius: 20,
     borderWidth: 1,
@@ -1761,7 +1796,6 @@ const styles = StyleSheet.create({
     paddingBottom: 14,
   },
 
-  /* pie de página / cierre */
   footer: {
     marginTop: 32,
     paddingTop: 22,

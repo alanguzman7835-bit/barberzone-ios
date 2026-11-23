@@ -1,11 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useAgenda } from '../constants/AgendaContext';
 import {
   ETIQUETA_ESTADO,
-  fechaDesdeClave,
   hoyISO,
-  inicioDeSemanaISO,
   minutosDelDia,
   type CitaEquipo,
 } from '../constants/AgendaTipos';
@@ -13,48 +11,18 @@ import { useBzTheme } from '../constants/BzTheme';
 import { UsuarioBz } from '../constants/Sesion';
 import {
   BotonPrimario,
-  BotonSecundario,
-  CampoTexto,
-  ChipTexto,
   Divisor,
   Etiqueta,
-  Fila,
-  Segmentado,
   Tarjeta,
-  Titulo,
 } from './BzFase3Ui';
 import FichaClienteSheet from './FichaClienteSheet';
 
 type SubVista = 'SERVICIO_EN_CURSO' | 'PRODUCTIVIDAD';
-type PeriodoEstadistica = 'Hoy' | 'Semana' | 'Quincena';
 
 interface TareaServicio {
   id: number;
   nombre: string;
   completado: boolean;
-}
-
-const DIAS_CORTO = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
-const MESES_CORTO = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
-
-function formatearHorasMinutos(totalMin: number): string {
-  const min = Math.max(0, Math.round(totalMin));
-  const h = Math.floor(min / 60);
-  const m = min % 60;
-  if (h === 0) return `${m} min`;
-  if (m === 0) return `${h}h 00m`;
-  return `${h}h ${String(m).padStart(2, '0')}m`;
-}
-
-function inicialesDe(nombre: string): string {
-  return (
-    nombre
-      .trim()
-      .split(/\s+/)
-      .slice(0, 2)
-      .map((p) => p[0]?.toUpperCase() ?? '')
-      .join('') || 'CL'
-  );
 }
 
 function tareasInicialesDeServicio(servicio: string): TareaServicio[] {
@@ -78,17 +46,11 @@ function tareasInicialesDeServicio(servicio: string): TareaServicio[] {
   ];
 }
 
-function moverDiasISO(baseISO: string, delta: number): string {
-  const f = fechaDesdeClave(baseISO);
-  f.setDate(f.getDate() + delta);
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${f.getFullYear()}-${pad(f.getMonth() + 1)}-${pad(f.getDate())}`;
-}
-
 export const BarberoPanelScreen: React.FC<{
   usuario: UsuarioBz;
   abrirEnComisiones?: boolean;
 }> = ({ usuario, abrirEnComisiones = false }) => {
+  const { colors } = useBzTheme();
   const [subVista, setSubVista] = useState<SubVista>(
     abrirEnComisiones ? 'PRODUCTIVIDAD' : 'SERVICIO_EN_CURSO',
   );
@@ -99,26 +61,54 @@ export const BarberoPanelScreen: React.FC<{
 
   return (
     <View style={{ flex: 1 }}>
-      <View style={{ flexDirection: 'row', gap: 8, paddingHorizontal: 20, paddingVertical: 10 }}>
-        {(
-          [
-            { titulo: 'Servicio en silla', vista: 'SERVICIO_EN_CURSO' },
-            { titulo: 'Productividad', vista: 'PRODUCTIVIDAD' },
-          ] as { titulo: string; vista: SubVista }[]
-        ).map((p) => (
-          <ChipTexto
-            key={p.vista}
-            texto={p.titulo}
-            centrado
-            apagado
-            negrita
-            padH={4}
-            padV={8}
-            style={{ flex: 1 }}
-            activo={subVista === p.vista}
-            onPress={() => setSubVista(p.vista)}
-          />
-        ))}
+      {/* Segmentado superior estilo cápsula con pill dorado */}
+      <View style={{ paddingHorizontal: 20, paddingTop: 14, paddingBottom: 8 }}>
+        <View
+          style={{
+            flexDirection: 'row',
+            backgroundColor: colors.BzCard,
+            borderRadius: 999,
+            borderWidth: 1,
+            borderColor: colors.BzBorder,
+            padding: 4,
+            maxWidth: 720,
+            width: '100%',
+            alignSelf: 'center',
+          }}
+        >
+          {(
+            [
+              { titulo: 'Servicio en silla', vista: 'SERVICIO_EN_CURSO' },
+              { titulo: 'Productividad', vista: 'PRODUCTIVIDAD' },
+            ] as { titulo: string; vista: SubVista }[]
+          ).map((p) => {
+            const activo = subVista === p.vista;
+            return (
+              <Pressable
+                key={p.vista}
+                onPress={() => setSubVista(p.vista)}
+                style={{
+                  flex: 1,
+                  height: 38,
+                  borderRadius: 999,
+                  backgroundColor: activo ? '#E2C46D' : 'transparent',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <Text
+                  style={{
+                    color: activo ? '#141416' : colors.BzMuted,
+                    fontSize: 13,
+                    fontWeight: activo ? '700' : '600',
+                  }}
+                >
+                  {p.titulo}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
       </View>
 
       {subVista === 'SERVICIO_EN_CURSO' ? (
@@ -133,7 +123,7 @@ export const BarberoPanelScreen: React.FC<{
   );
 };
 
-/* ---------- Vista 1: Servicio en silla (envía a Caja como POR_COBRAR) ---------- */
+/* ---------- Vista 1: Servicio en silla ---------- */
 
 const VistaServicioEnCurso: React.FC<{
   usuario: UsuarioBz;
@@ -179,6 +169,7 @@ const VistaServicioEnCurso: React.FC<{
   );
 
   const [tareas, setTareas] = useState<TareaServicio[]>([]);
+  const [extrasSel, setExtrasSel] = useState<string[]>([]);
   const [notas, setNotas] = useState('');
   const [maquina, setMaquina] = useState('#1.5');
   const [fotos, setFotos] = useState(0);
@@ -193,6 +184,7 @@ const VistaServicioEnCurso: React.FC<{
   useEffect(() => {
     if (citaEnSilla) {
       setTareas(tareasInicialesDeServicio(citaEnSilla.servicio));
+      setExtrasSel([]);
       setNotas(citaEnSilla.notasTecnicas || fichaActual?.notasUltimoCorte || '');
       if (fichaActual?.maquinaPreferida) {
         setMaquina(fichaActual.maquinaPreferida);
@@ -212,7 +204,14 @@ const VistaServicioEnCurso: React.FC<{
   if (!citaEnSilla) {
     return (
       <ScrollView
-        contentContainerStyle={{ paddingHorizontal: 20, paddingVertical: 14, gap: 14 }}
+        contentContainerStyle={{
+          paddingHorizontal: 20,
+          paddingVertical: 14,
+          gap: 14,
+          maxWidth: 720,
+          width: '100%',
+          alignSelf: 'center',
+        }}
         showsVerticalScrollIndicator={false}
       >
         {mensajeFinal && (
@@ -263,16 +262,22 @@ const VistaServicioEnCurso: React.FC<{
   }
 
   const completadas = tareas.filter((t) => t.completado).length;
+  const todasEtapasListas = tareas.length > 0 && completadas === tareas.length;
+  const progresoPct = tareas.length > 0 ? (completadas / tareas.length) * 100 : 0;
+
+  const toggleExtra = (extra: string) => {
+    setExtrasSel((prev) =>
+      prev.includes(extra) ? prev.filter((e) => e !== extra) : [...prev, extra],
+    );
+  };
 
   const finalizarServicioActual = () => {
-    const extrasAgregados = tareas
-      .slice(tareasInicialesDeServicio(citaEnSilla.servicio).length)
-      .map((t) => t.nombre);
+    if (!todasEtapasListas) return;
 
     const resumenTecnico = [
       notas.trim(),
       maquina.trim() ? `Máquina/peine: ${maquina.trim()}` : '',
-      extrasAgregados.length > 0 ? `Extras: ${extrasAgregados.join(', ')}` : '',
+      extrasSel.length > 0 ? `Extras: ${extrasSel.join(', ')}` : '',
     ]
       .filter(Boolean)
       .join(' · ');
@@ -282,7 +287,6 @@ const VistaServicioEnCurso: React.FC<{
       guardarNotasFicha(citaEnSilla, notas.trim() || resumenTecnico, maquina.trim());
     }
 
-    // Queda POR_COBRAR hasta que recepción confirme el pago en Caja
     cambiarEstadoCita(citaEnSilla.id, 'POR_COBRAR');
     setMensajeFinal(
       `${citaEnSilla.clienteNombre} pasó a recepción para cobrar (${citaEnSilla.servicio}).`,
@@ -305,35 +309,64 @@ const VistaServicioEnCurso: React.FC<{
       />
 
       <ScrollView
-        contentContainerStyle={{ paddingHorizontal: 20, paddingVertical: 10, gap: 12, paddingBottom: 24 }}
+        contentContainerStyle={{
+          paddingHorizontal: 20,
+          paddingVertical: 10,
+          gap: 16,
+          paddingBottom: 32,
+          maxWidth: 720,
+          width: '100%',
+          alignSelf: 'center',
+        }}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        <Tarjeta padding={14} radius={14} borderColor={colors.BzWarning} gap={10}>
-          <Fila>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 }}>
+        {/* Tarjeta superior del cliente con borde dorado */}
+        <View
+          style={{
+            backgroundColor: colors.BzCard,
+            borderRadius: 16,
+            borderWidth: 1,
+            borderColor: '#4D4123',
+            padding: 16,
+            gap: 12,
+          }}
+        >
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14, flex: 1 }}>
+              {/* Miniatura / Avatar cuadrado */}
               <View
                 style={{
-                  width: 40,
-                  height: 40,
-                  borderRadius: 20,
+                  width: 60,
+                  height: 60,
+                  borderRadius: 12,
                   backgroundColor: colors.BzBg,
                   borderWidth: 1,
-                  borderColor: colors.BzWarning,
+                  borderColor: colors.BzBorder,
                   alignItems: 'center',
                   justifyContent: 'center',
                 }}
               >
-                <Text style={{ color: colors.BzText, fontSize: 13, fontWeight: '600' }}>
-                  {inicialesDe(citaEnSilla.clienteNombre)}
-                </Text>
+                <View
+                  style={{
+                    width: 14,
+                    height: 14,
+                    borderRadius: 3,
+                    borderWidth: 1.5,
+                    borderColor: colors.BzMuted,
+                  }}
+                />
               </View>
-              <View style={{ flex: 1 }}>
-                <Text style={{ color: colors.BzText, fontSize: 16, fontWeight: '600' }}>
+
+              <View style={{ flex: 1, gap: 2 }}>
+                <Text style={{ color: colors.BzText, fontSize: 18, fontWeight: '800' }}>
                   {citaEnSilla.clienteNombre}
                 </Text>
+                <Text style={{ color: '#E2C46D', fontSize: 13, fontWeight: '700' }}>
+                  {citaEnSilla.servicio}
+                </Text>
                 <Text style={{ color: colors.BzMuted, fontSize: 12 }}>
-                  {citaEnSilla.servicio} · Turno {citaEnSilla.horaTexto} ({citaEnSilla.duracionMin} min)
+                  Turno {citaEnSilla.horaTexto} · {citaEnSilla.duracionMin} min
                 </Text>
               </View>
             </View>
@@ -341,19 +374,19 @@ const VistaServicioEnCurso: React.FC<{
             <Pressable
               onPress={() => setVerFicha(true)}
               style={{
-                borderRadius: 20,
+                borderRadius: 10,
                 backgroundColor: colors.BzBg,
                 borderWidth: 1,
                 borderColor: colors.BzBorder,
-                paddingHorizontal: 10,
-                paddingVertical: 6,
+                paddingHorizontal: 14,
+                paddingVertical: 9,
               }}
             >
-              <Text style={{ color: colors.BzText, fontSize: 11, fontWeight: '600' }}>
-                Pase técnico ›
+              <Text style={{ color: colors.BzText, fontSize: 12, fontWeight: '700' }}>
+                Pase técnico
               </Text>
             </Pressable>
-          </Fila>
+          </View>
 
           {citaEnSilla.notasCliente ? (
             <View
@@ -365,7 +398,7 @@ const VistaServicioEnCurso: React.FC<{
                 borderColor: colors.BzBorder,
               }}
             >
-              <Text style={{ color: colors.BzMuted, fontSize: 10, letterSpacing: 1.2 }}>
+              <Text style={{ color: colors.BzMuted, fontSize: 10, letterSpacing: 1 }}>
                 INDICACIÓN DEL CLIENTE
               </Text>
               <Text style={{ color: colors.BzText, fontSize: 12, marginTop: 2 }}>
@@ -373,379 +406,491 @@ const VistaServicioEnCurso: React.FC<{
               </Text>
             </View>
           ) : null}
-        </Tarjeta>
+        </View>
 
-        <Fila>
-          <Etiqueta texto="ETAPAS DEL SERVICIO" />
-          <Text style={{ color: colors.BzMuted, fontSize: 11 }}>
-            {completadas} de {tareas.length} listas
-          </Text>
-        </Fila>
+        {/* Etapas + Barra de progreso */}
+        <View style={{ gap: 8 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+            <Text style={{ color: colors.BzText, fontSize: 13.5, fontWeight: '700' }}>
+              Etapas
+            </Text>
+            <Text style={{ color: colors.BzMuted, fontSize: 12 }}>
+              {completadas} de {tareas.length}
+            </Text>
+          </View>
 
-        <Tarjeta padding={12}>
-          {tareas.map((tarea, idx) => (
-            <View key={tarea.id} style={{ gap: 8 }}>
-              {idx > 0 && <Divisor />}
-              <Pressable
-                onPress={() =>
-                  setTareas((ts) =>
-                    ts.map((t) => (t.id === tarea.id ? { ...t, completado: !t.completado } : t)),
-                  )
-                }
-                style={{ paddingVertical: 4 }}
-              >
-                <Fila>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 }}>
+          {/* Barra de progreso */}
+          <View
+            style={{
+              height: 4,
+              borderRadius: 999,
+              backgroundColor: colors.BzCard,
+              overflow: 'hidden',
+            }}
+          >
+            <View
+              style={{
+                height: '100%',
+                width: `${progresoPct}%`,
+                backgroundColor: '#E2C46D',
+                borderRadius: 999,
+              }}
+            />
+          </View>
+
+          {/* Tarjeta lista de etapas */}
+          <View
+            style={{
+              backgroundColor: colors.BzCard,
+              borderRadius: 14,
+              borderWidth: 1,
+              borderColor: colors.BzBorder,
+              overflow: 'hidden',
+            }}
+          >
+            {tareas.map((tarea, idx) => (
+              <View key={tarea.id}>
+                {idx > 0 && <View style={{ height: 1, backgroundColor: colors.BzBorder }} />}
+                <Pressable
+                  onPress={() =>
+                    setTareas((ts) =>
+                      ts.map((t) => (t.id === tarea.id ? { ...t, completado: !t.completado } : t)),
+                    )
+                  }
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    paddingHorizontal: 16,
+                    paddingVertical: 15,
+                  }}
+                >
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 }}>
                     <View
                       style={{
                         width: 20,
                         height: 20,
                         borderRadius: 5,
-                        borderWidth: 1,
-                        borderColor: tarea.completado ? colors.BzSuccess : colors.BzMuted,
-                        backgroundColor: tarea.completado ? colors.BzSuccess : 'transparent',
+                        borderWidth: 1.2,
+                        borderColor: tarea.completado ? '#E2C46D' : colors.BzBorder,
+                        backgroundColor: tarea.completado ? '#E2C46D' : 'transparent',
                         alignItems: 'center',
                         justifyContent: 'center',
                       }}
                     >
                       {tarea.completado && (
-                        <Text style={{ color: '#FFFFFF', fontSize: 11, fontWeight: '700' }}>✓</Text>
+                        <Text style={{ color: '#141416', fontSize: 12, fontWeight: '800' }}>✓</Text>
                       )}
                     </View>
                     <Text
                       style={{
                         color: tarea.completado ? colors.BzMuted : colors.BzText,
-                        fontSize: 13,
+                        fontSize: 13.5,
+                        fontWeight: '600',
                         textDecorationLine: tarea.completado ? 'line-through' : 'none',
                       }}
                     >
                       {tarea.nombre}
                     </Text>
                   </View>
-                  <Text style={{ color: colors.BzMuted, fontSize: 11 }}>
+
+                  <Text
+                    style={{
+                      color: tarea.completado ? colors.BzSuccess : colors.BzMuted,
+                      fontSize: 11.5,
+                      fontWeight: tarea.completado ? '700' : '500',
+                    }}
+                  >
                     {tarea.completado ? 'Listo' : 'Pendiente'}
                   </Text>
-                </Fila>
-              </Pressable>
-            </View>
-          ))}
-        </Tarjeta>
-
-        <Etiqueta texto="+ AGREGAR EXTRA REALIZADO" />
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
-          {extrasDisponibles.map((extra) => {
-            const yaAgregado = tareas.some((t) => t.nombre === extra);
-            return (
-              <ChipTexto
-                key={extra}
-                texto={yaAgregado ? `✓ ${extra}` : `+ ${extra}`}
-                size={11}
-                activo={yaAgregado}
-                onPress={() => {
-                  if (!yaAgregado) {
-                    setTareas((ts) => [
-                      ...ts,
-                      {
-                        id: Math.max(0, ...ts.map((t) => t.id)) + 1,
-                        nombre: extra,
-                        completado: true,
-                      },
-                    ]);
-                  }
-                }}
-              />
-            );
-          })}
-        </ScrollView>
-
-        <Etiqueta texto="BITÁCORA TÉCNICA DEL CORTE" />
-        <CampoTexto
-          valor={notas}
-          onCambio={setNotas}
-          placeholder="Detalle del desvanecido, tijera, contorno o preferencias para su próxima visita…"
-          multiline
-          fondo="card"
-        />
-
-        <Etiqueta texto="PEINE / MÁQUINA PRINCIPAL" />
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-          {['#0.5', '#1', '#1.5', '#2', '#3', 'Tijera'].map((n) => (
-            <ChipTexto
-              key={n}
-              texto={n}
-              padH={12}
-              negrita
-              activo={maquina === n}
-              onPress={() => setMaquina(n)}
-            />
-          ))}
+                </Pressable>
+              </View>
+            ))}
+          </View>
         </View>
 
-        <BotonSecundario
-          texto={fotos === 0 ? '◉ Guardar foto del resultado' : `◉ ${fotos} foto(s) guardada(s) en ficha`}
-          height={44}
-          onPress={() => setFotos(fotos + 1)}
-        />
+        {/* Extras: Grid de 5 tarjetas verticales */}
+        <View style={{ gap: 10 }}>
+          <Text style={{ color: colors.BzText, fontSize: 13.5, fontWeight: '700' }}>
+            Extras
+          </Text>
 
-        <BotonPrimario
-          texto="Finalizar servicio y enviar a caja"
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
+            {extrasDisponibles.map((extra) => {
+              const activo = extrasSel.includes(extra);
+              return (
+                <Pressable
+                  key={extra}
+                  onPress={() => toggleExtra(extra)}
+                  style={{
+                    flex: 1,
+                    minWidth: 112,
+                    backgroundColor: activo ? '#221E14' : colors.BzCard,
+                    borderRadius: 14,
+                    borderWidth: 1,
+                    borderColor: activo ? '#E2C46D' : colors.BzBorder,
+                    padding: 10,
+                    alignItems: 'center',
+                    gap: 10,
+                  }}
+                >
+                  <View
+                    style={{
+                      width: '100%',
+                      aspectRatio: 1,
+                      borderRadius: 10,
+                      backgroundColor: colors.BzBg,
+                      borderWidth: 1,
+                      borderColor: activo ? '#5C4D24' : colors.BzBorder,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    {activo ? (
+                      <Text style={{ color: '#E2C46D', fontSize: 16, fontWeight: '800' }}>✓</Text>
+                    ) : (
+                      <View
+                        style={{
+                          width: 12,
+                          height: 12,
+                          borderRadius: 3,
+                          borderWidth: 1.5,
+                          borderColor: colors.BzMuted,
+                        }}
+                      />
+                    )}
+                  </View>
+
+                  <Text
+                    style={{
+                      color: activo ? '#E2C46D' : colors.BzText,
+                      fontSize: 11.5,
+                      fontWeight: activo ? '700' : '600',
+                      textAlign: 'center',
+                    }}
+                    numberOfLines={1}
+                  >
+                    {extra}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </View>
+
+        {/* Notas del corte */}
+        <View style={{ gap: 8 }}>
+          <Text style={{ color: colors.BzText, fontSize: 13.5, fontWeight: '700' }}>
+            Notas del corte
+          </Text>
+          <TextInput
+            value={notas}
+            onChangeText={setNotas}
+            placeholder="Desvanecido, tijera, contorno o preferencias"
+            placeholderTextColor={colors.BzMuted}
+            multiline
+            textAlignVertical="top"
+            style={{
+              minHeight: 84,
+              borderRadius: 14,
+              backgroundColor: colors.BzCard,
+              borderWidth: 1,
+              borderColor: colors.BzBorder,
+              paddingHorizontal: 14,
+              paddingVertical: 12,
+              color: colors.BzText,
+              fontSize: 13,
+            }}
+          />
+        </View>
+
+        {/* Peine / máquina */}
+        <View style={{ gap: 8 }}>
+          <Text style={{ color: colors.BzText, fontSize: 13.5, fontWeight: '700' }}>
+            Peine / máquina
+          </Text>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+            {['#0.5', '#1', '#1.5', '#2', '#3', 'Tijera'].map((n) => {
+              const activo = maquina === n;
+              return (
+                <Pressable
+                  key={n}
+                  onPress={() => setMaquina(n)}
+                  style={{
+                    paddingHorizontal: 16,
+                    paddingVertical: 9,
+                    borderRadius: 999,
+                    backgroundColor: activo ? '#221E14' : colors.BzCard,
+                    borderWidth: 1,
+                    borderColor: activo ? '#E2C46D' : colors.BzBorder,
+                  }}
+                >
+                  <Text
+                    style={{
+                      color: activo ? '#E2C46D' : colors.BzText,
+                      fontSize: 12.5,
+                      fontWeight: activo ? '700' : '600',
+                    }}
+                  >
+                    {n}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </View>
+
+        {/* Foto del resultado */}
+        <Pressable
+          onPress={() => setFotos((f) => f + 1)}
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            backgroundColor: colors.BzCard,
+            borderRadius: 14,
+            borderWidth: 1,
+            borderColor: fotos > 0 ? '#E2C46D' : colors.BzBorder,
+            padding: 12,
+          }}
+        >
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+            <View
+              style={{
+                width: 38,
+                height: 38,
+                borderRadius: 10,
+                backgroundColor: colors.BzBg,
+                borderWidth: 1,
+                borderColor: colors.BzBorder,
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <Text style={{ color: fotos > 0 ? '#E2C46D' : colors.BzMuted, fontSize: 14 }}>◉</Text>
+            </View>
+            <Text style={{ color: colors.BzText, fontSize: 13.5, fontWeight: '700' }}>
+              {fotos === 0 ? 'Foto del resultado' : `Foto del resultado (${fotos})`}
+            </Text>
+          </View>
+
+          <Text style={{ color: fotos > 0 ? '#E2C46D' : colors.BzMuted, fontSize: 12 }}>
+            {fotos === 0 ? 'Opcional' : 'Guardada ✓'}
+          </Text>
+        </Pressable>
+
+        {/* Botón inferior: Completa las etapas (deshabilitado) -> Finalizar servicio y enviar a caja (dorado) */}
+        <Pressable
+          disabled={!todasEtapasListas}
           onPress={finalizarServicioActual}
-        />
+          style={({ pressed }) => [
+            {
+              height: 52,
+              borderRadius: 14,
+              backgroundColor: todasEtapasListas ? '#E2C46D' : '#1E1E22',
+              alignItems: 'center',
+              justifyContent: 'center',
+              marginTop: 2,
+            },
+            pressed && todasEtapasListas && { opacity: 0.9 },
+          ]}
+        >
+          <Text
+            style={{
+              color: todasEtapasListas ? '#141416' : colors.BzMuted,
+              fontSize: 14.5,
+              fontWeight: '800',
+            }}
+          >
+            {todasEtapasListas ? 'Finalizar servicio y enviar a caja' : 'Completa las etapas'}
+          </Text>
+        </Pressable>
       </ScrollView>
     </>
   );
 };
 
-/* ---------- Vista 2: Productividad, Propinas del Día e Historial ---------- */
+/* ---------- Vista 2: Productividad ---------- */
 
 const VistaProductividadBarbero: React.FC<{ usuario: UsuarioBz }> = ({ usuario }) => {
   const { colors } = useBzTheme();
-  const { citasEquipo, propinasHoy } = useAgenda();
+  const { citasEquipo } = useAgenda();
   const hoy = hoyISO();
-  const [periodo, setPeriodo] = useState<PeriodoEstadistica>('Hoy');
 
-  const misPropinasHoy = useMemo(
-    () => propinasHoy.filter((p) => p.barberoId === usuario.id),
-    [propinasHoy, usuario.id],
-  );
-
-  const totalPropinasHoy = useMemo(
-    () => misPropinasHoy.reduce((sum, p) => sum + p.monto, 0),
-    [misPropinasHoy],
-  );
-
-  const citasBarbero = useMemo(
+  const citasHoy = useMemo(
     () =>
       citasEquipo
-        .filter((c) => c.barberoId === usuario.id && c.estado !== 'CANCELADA')
-        .sort((a, b) => {
-          if (a.fechaISO !== b.fechaISO) return b.fechaISO.localeCompare(a.fechaISO);
-          return minutosDelDia(b) - minutosDelDia(a);
-        }),
-    [citasEquipo, usuario.id],
+        .filter(
+          (c) =>
+            c.barberoId === usuario.id &&
+            c.fechaISO === hoy &&
+            c.estado !== 'CANCELADA',
+        )
+        .sort((a, b) => minutosDelDia(b) - minutosDelDia(a)),
+    [citasEquipo, usuario.id, hoy],
   );
 
-  const estadisticas = useMemo(() => {
-    const lunesSemana = inicioDeSemanaISO(hoy);
-    const inicioQuincena = moverDiasISO(hoy, -14);
+  const hechasHoy = useMemo(
+    () => citasHoy.filter((c) => c.estado === 'TERMINADA' || c.estado === 'POR_COBRAR'),
+    [citasHoy],
+  );
 
-    const citasHoy = citasBarbero.filter((c) => c.fechaISO === hoy);
-    const atendidasHoy = citasHoy.filter(
-      (c) => c.estado === 'TERMINADA' || c.estado === 'POR_COBRAR',
-    );
-    const enSillaHoy = citasHoy.filter((c) => c.estado === 'EN_SERVICIO');
-
-    const minHoy =
-      atendidasHoy.reduce((acc, c) => acc + c.duracionMin, 0) +
-      enSillaHoy.reduce((acc, c) => acc + Math.round(c.duracionMin * 0.5), 0);
-
-    if (periodo === 'Hoy') {
-      const totalProgramadas = Math.max(1, citasHoy.length);
-      const productividadPct = Math.min(
-        100,
-        Math.round(((atendidasHoy.length + enSillaHoy.length * 0.5) / totalProgramadas) * 100),
-      );
-      return {
-        horasLabel: formatearHorasMinutos(minHoy),
-        subtituloPrincipal: 'TIEMPO EFECTIVO EN SILLA HOY',
-        tarjetas: [
-          { etiqueta: 'Atendidos', valor: `${atendidasHoy.length} / ${citasHoy.length}` },
-          { etiqueta: 'Productividad', valor: `${productividadPct}%` },
-          { etiqueta: 'Propinas hoy', valor: `$${totalPropinasHoy}` },
-        ],
-        etiquetasBarras: ['9h', '11h', '13h', '15h', '17h', '19h'],
-        barras: [0.85, 0.9, 0.45, 0.7, 0.35, 0.2],
-        indiceDestacado: 1,
-        tituloHistorial: `SERVICIOS DE HOY (${citasHoy.length})`,
-        historial: citasHoy,
-      };
-    }
-
-    if (periodo === 'Semana') {
-      const citasSemanaReales = citasBarbero.filter((c) => c.fechaISO >= lunesSemana && c.fechaISO <= hoy);
-      const minExtraSemana = 19 * 60 + 20;
-      const totalMinSemana = minExtraSemana + minHoy;
-      const totalServiciosSemana = 24 + atendidasHoy.length;
-
-      return {
-        horasLabel: formatearHorasMinutos(totalMinSemana),
-        subtituloPrincipal: 'HORAS TRABAJADAS EN LA SEMANA',
-        tarjetas: [
-          { etiqueta: 'Servicios', valor: `${totalServiciosSemana}` },
-          { etiqueta: 'Productividad', valor: '88%' },
-          { etiqueta: 'Propinas hoy', valor: `$${totalPropinasHoy}` },
-        ],
-        etiquetasBarras: ['L', 'M', 'X', 'J', 'V', 'S'],
-        barras: [0.75, 0.85, 0.7, 0.92, 0.88, Math.max(0.35, Math.min(1, minHoy / 360))],
-        indiceDestacado: 3,
-        tituloHistorial: 'HISTORIAL SEMANAL RECIENTE',
-        historial: citasSemanaReales,
-      };
-    }
-
-    const citasQuincenaReales = citasBarbero.filter((c) => c.fechaISO >= inicioQuincena && c.fechaISO <= hoy);
-    const minExtraQuincena = 54 * 60 + 40;
-    const totalMinQuincena = minExtraQuincena + minHoy;
-    const totalServiciosQuincena = 63 + atendidasHoy.length;
-
-    return {
-      horasLabel: formatearHorasMinutos(totalMinQuincena),
-      subtituloPrincipal: 'HORAS TRABAJADAS EN LA QUINCENA',
-      tarjetas: [
-        { etiqueta: 'Servicios', valor: `${totalServiciosQuincena}` },
-        { etiqueta: 'Productividad', valor: '91%' },
-        { etiqueta: 'Propinas hoy', valor: `$${totalPropinasHoy}` },
-      ],
-      etiquetasBarras: ['S1 L-X', 'S1 J-S', 'S2 L-X', 'S2 J-S', 'Extra', 'Hoy'],
-      barras: [0.82, 0.9, 0.86, 0.94, 0.65, Math.max(0.35, Math.min(1, minHoy / 360))],
-      indiceDestacado: 3,
-      tituloHistorial: 'HISTORIAL QUINCENAL RECIENTE',
-      historial: citasQuincenaReales,
-    };
-  }, [citasBarbero, hoy, periodo, totalPropinasHoy]);
+  const metricas = useMemo(() => {
+    const cantidad = hechasHoy.length;
+    const totalMin = hechasHoy.reduce((acc, c) => acc + c.duracionMin, 0);
+    const promedioMin = cantidad > 0 ? Math.round(totalMin / cantidad) : 0;
+    const generado = hechasHoy.reduce((acc, c) => acc + c.precio, 0);
+    return { cantidad, promedioMin, generado };
+  }, [hechasHoy]);
 
   return (
     <ScrollView
-      contentContainerStyle={{ paddingHorizontal: 20, paddingVertical: 10, gap: 14, paddingBottom: 24 }}
+      contentContainerStyle={{
+        paddingHorizontal: 20,
+        paddingVertical: 12,
+        gap: 16,
+        paddingBottom: 32,
+        maxWidth: 720,
+        width: '100%',
+        alignSelf: 'center',
+      }}
       showsVerticalScrollIndicator={false}
     >
-      <Titulo texto={`Productividad · ${usuario.nombre}`} />
+      {/* 3 Tarjetas métricas superiores */}
+      <View style={{ flexDirection: 'row', gap: 12 }}>
+        <View
+          style={{
+            flex: 1,
+            backgroundColor: colors.BzCard,
+            borderRadius: 14,
+            borderWidth: 1,
+            borderColor: colors.BzBorder,
+            padding: 16,
+            gap: 6,
+          }}
+        >
+          <Text style={{ color: colors.BzMuted, fontSize: 12 }}>Servicios hoy</Text>
+          <Text style={{ color: colors.BzText, fontSize: 24, fontWeight: '800' }}>
+            {metricas.cantidad}
+          </Text>
+        </View>
 
-      <Segmentado
-        opciones={['Hoy', 'Semana', 'Quincena']}
-        valor={periodo}
-        onChange={(v) => setPeriodo(v as PeriodoEstadistica)}
-      />
+        <View
+          style={{
+            flex: 1,
+            backgroundColor: colors.BzCard,
+            borderRadius: 14,
+            borderWidth: 1,
+            borderColor: colors.BzBorder,
+            padding: 16,
+            gap: 6,
+          }}
+        >
+          <Text style={{ color: colors.BzMuted, fontSize: 12 }}>Tiempo promedio</Text>
+          <Text style={{ color: colors.BzText, fontSize: 24, fontWeight: '800' }}>
+            {metricas.promedioMin} min
+          </Text>
+        </View>
 
-      <View style={{ alignItems: 'center', gap: 2, paddingVertical: 4 }}>
-        <Text style={{ color: colors.BzText, fontSize: 36, fontWeight: '300' }}>
-          {estadisticas.horasLabel}
-        </Text>
-        <Etiqueta texto={estadisticas.subtituloPrincipal} />
+        <View
+          style={{
+            flex: 1,
+            backgroundColor: colors.BzCard,
+            borderRadius: 14,
+            borderWidth: 1,
+            borderColor: colors.BzBorder,
+            padding: 16,
+            gap: 6,
+          }}
+        >
+          <Text style={{ color: colors.BzMuted, fontSize: 12 }}>Generado</Text>
+          <Text style={{ color: colors.BzSuccess, fontSize: 24, fontWeight: '800' }}>
+            ${metricas.generado.toLocaleString('en-US')}
+          </Text>
+        </View>
       </View>
 
-      <View style={{ flexDirection: 'row', gap: 8 }}>
-        {estadisticas.tarjetas.map((t) => (
-          <Tarjeta key={t.etiqueta} padding={10} radius={12} gap={2} style={{ flex: 1 }}>
-            <Text style={{ color: colors.BzMuted, fontSize: 11 }}>{t.etiqueta}</Text>
-            <Text style={{ color: colors.BzText, fontSize: 15, fontWeight: '600' }}>{t.valor}</Text>
-          </Tarjeta>
-        ))}
-      </View>
+      {/* Sección Hechos hoy */}
+      <Text style={{ color: colors.BzText, fontSize: 14, fontWeight: '700' }}>
+        Hechos hoy
+      </Text>
 
-      {/* Propinas registradas en caja hoy para este barbero */}
-      <Tarjeta padding={12} radius={12} gap={8}>
-        <Fila>
-          <Etiqueta texto="PROPINAS RECOLECTADAS HOY" />
-          <Text style={{ color: colors.BzSuccess, fontSize: 14, fontWeight: '700' }}>
-            +${totalPropinasHoy}
-          </Text>
-        </Fila>
-        {misPropinasHoy.length === 0 ? (
-          <Text style={{ color: colors.BzMuted, fontSize: 12 }}>
-            Aún no hay propinas registradas en caja hoy.
-          </Text>
+      <View
+        style={{
+          backgroundColor: colors.BzCard,
+          borderRadius: 16,
+          borderWidth: 1,
+          borderColor: colors.BzBorder,
+          overflow: 'hidden',
+        }}
+      >
+        {hechasHoy.length === 0 ? (
+          <View style={{ padding: 18 }}>
+            <Text style={{ color: colors.BzMuted, fontSize: 13 }}>
+              Aún no has finalizado servicios hoy. Cuando termines un corte en silla aparecerá aquí.
+            </Text>
+          </View>
         ) : (
-          misPropinasHoy.map((prop, idx) => (
-            <View key={prop.id} style={{ gap: 6 }}>
-              {idx > 0 && <Divisor />}
-              <Fila>
-                <Text style={{ color: colors.BzText, fontSize: 12 }}>
-                  {prop.hora} · {prop.clienteNombre}
-                </Text>
-                <Text style={{ color: colors.BzSuccess, fontSize: 12, fontWeight: '600' }}>
-                  +${prop.monto}
-                </Text>
-              </Fila>
+          hechasHoy.map((cita: CitaEquipo, idx: number) => (
+            <View key={cita.id}>
+              {idx > 0 && <View style={{ height: 1, backgroundColor: colors.BzBorder }} />}
+              <View
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  paddingHorizontal: 16,
+                  paddingVertical: 14,
+                  gap: 12,
+                }}
+              >
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14, flex: 1 }}>
+                  <View
+                    style={{
+                      width: 44,
+                      height: 44,
+                      borderRadius: 10,
+                      backgroundColor: colors.BzBg,
+                      borderWidth: 1,
+                      borderColor: colors.BzBorder,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    <View
+                      style={{
+                        width: 12,
+                        height: 12,
+                        borderRadius: 3,
+                        borderWidth: 1.5,
+                        borderColor: colors.BzMuted,
+                      }}
+                    />
+                  </View>
+
+                  <Text
+                    style={{ color: colors.BzText, fontSize: 14, fontWeight: '700', flex: 1 }}
+                    numberOfLines={1}
+                  >
+                    {cita.servicio}
+                  </Text>
+                </View>
+
+                <View style={{ alignItems: 'flex-end', gap: 2 }}>
+                  <Text style={{ color: colors.BzMuted, fontSize: 12 }}>
+                    {cita.horaTexto}
+                  </Text>
+                  <Text style={{ color: colors.BzMuted, fontSize: 12 }}>
+                    {cita.duracionMin} min
+                  </Text>
+                </View>
+              </View>
             </View>
           ))
         )}
-      </Tarjeta>
-
-      <Tarjeta gap={8}>
-        <Fila>
-          <Etiqueta texto="RITMO DE TRABAJO" />
-          <Text style={{ color: colors.BzMuted, fontSize: 11 }}>{periodo}</Text>
-        </Fila>
-        <View style={{ height: 84, flexDirection: 'row', alignItems: 'flex-end', gap: 10 }}>
-          {estadisticas.barras.map((ratio, idx) => (
-            <View
-              key={idx}
-              style={{
-                flex: 1,
-                height: Math.max(10, 80 * ratio),
-                borderTopLeftRadius: 4,
-                borderTopRightRadius: 4,
-                backgroundColor: idx === estadisticas.indiceDestacado ? colors.BzText : colors.BzBorder,
-              }}
-            />
-          ))}
-        </View>
-        <View style={{ flexDirection: 'row', gap: 10 }}>
-          {estadisticas.etiquetasBarras.map((etq) => (
-            <Text key={etq} style={{ flex: 1, color: colors.BzMuted, fontSize: 10, textAlign: 'center' }}>
-              {etq}
-            </Text>
-          ))}
-        </View>
-      </Tarjeta>
-
-      <Etiqueta texto={estadisticas.tituloHistorial} />
-      <Tarjeta padding={12} gap={8}>
-        {estadisticas.historial.length === 0 ? (
-          <Text style={{ color: colors.BzMuted, fontSize: 12 }}>
-            Aún no hay servicios registrados en este periodo.
-          </Text>
-        ) : (
-          estadisticas.historial.map((cita: CitaEquipo, idx: number) => {
-            const fecha = fechaDesdeClave(cita.fechaISO);
-            const esTerminada = cita.estado === 'TERMINADA';
-            const esPorCobrar = cita.estado === 'POR_COBRAR';
-            const esEnSilla = cita.estado === 'EN_SERVICIO';
-            return (
-              <View key={cita.id} style={{ gap: 6 }}>
-                {idx > 0 && <Divisor />}
-                <Fila style={{ paddingTop: idx > 0 ? 4 : 0 }}>
-                  <View style={{ flex: 1, paddingRight: 8 }}>
-                    <Text style={{ color: colors.BzText, fontSize: 13, fontWeight: '500' }} numberOfLines={1}>
-                      {cita.horaTexto} · {cita.clienteNombre}
-                    </Text>
-                    <Text style={{ color: colors.BzMuted, fontSize: 11 }} numberOfLines={1}>
-                      {cita.servicio} · {DIAS_CORTO[fecha.getDay()]} {fecha.getDate()} {MESES_CORTO[fecha.getMonth()]}
-                    </Text>
-                  </View>
-
-                  <View style={styles.duracionPill}>
-                    <Text
-                      style={{
-                        color: esTerminada
-                          ? colors.BzSuccess
-                          : esPorCobrar || esEnSilla
-                          ? colors.BzWarning
-                          : colors.BzMuted,
-                        fontSize: 11,
-                        fontWeight: '600',
-                      }}
-                    >
-                      {cita.duracionMin} min · {ETIQUETA_ESTADO[cita.estado]}
-                    </Text>
-                  </View>
-                </Fila>
-              </View>
-            );
-          })
-        )}
-      </Tarjeta>
+      </View>
     </ScrollView>
   );
 };
 
 export default BarberoPanelScreen;
-
-const styles = StyleSheet.create({
-  duracionPill: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-});

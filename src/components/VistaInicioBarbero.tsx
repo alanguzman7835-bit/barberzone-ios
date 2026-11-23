@@ -28,7 +28,6 @@ import {
   BzNotificacionesSheet,
   notificacionesIniciales,
 } from './BzHeaderTema';
-import { DesktopShell } from './DesktopShell';
 import FichaClienteSheet from './FichaClienteSheet';
 
 /* =====================================================================
@@ -100,14 +99,13 @@ export const VistaInicioBarbero: React.FC<{
   onIrAgenda: () => void;
   onIrNuevaCita: () => void;
   onIrServicio: () => void;
-  onIrComisiones: () => void;
+  onIrComisiones?: () => void;
   onIrPerfil: () => void;
 }> = ({
   usuario,
   onIrAgenda,
   onIrNuevaCita,
   onIrServicio,
-  onIrComisiones,
   onIrPerfil,
 }) => {
   const { colors } = useBzTheme();
@@ -143,13 +141,6 @@ export const VistaInicioBarbero: React.FC<{
         .sort((a, b) => minutosDelDia(a) - minutosDelDia(b)),
     [citasEquipo, usuario.id, hoy],
   );
-
-  const comisionHoy = useMemo(() => {
-    const totalTerminado = citasHoyBarbero
-      .filter((c) => c.estado === 'TERMINADA')
-      .reduce((acc, c) => acc + c.precio, 0);
-    return Math.round(totalTerminado * 0.5);
-  }, [citasHoyBarbero]);
 
   const citaDestacada = resumen.actual ?? resumen.siguiente ?? null;
   const esEnSillaAhora = Boolean(resumen.actual);
@@ -420,152 +411,119 @@ export const VistaInicioBarbero: React.FC<{
     </Tarjeta>
   );
 
-  /** Contenido principal para PC (Desktop Dashboard estilo referencia) */
+  /** Contenido principal para PC (usa el menú lateral global único de la app) */
   const renderDesktopDashboard = () => (
-    <DesktopShell
-      businessName="BarberZones"
-      businessSubtitle={sucursalEtiqueta}
-      activeKey="hoy"
-      onSelectNav={(key) => {
-        if (key === 'agenda') onIrAgenda();
-        if (key === 'nueva') onIrNuevaCita();
-        if (key === 'silla') onIrServicio();
-        if (key === 'comisiones') onIrComisiones();
-        if (key === 'perfil') onIrPerfil();
-      }}
-      navItems={[
-        { key: 'hoy', label: 'Hoy' },
-        { key: 'agenda', label: 'Citas', badge: resumen.porAtender },
-        { key: 'nueva', label: '+ Nueva cita' },
-        { key: 'silla', label: 'En silla', badge: resumen.enSilla },
-        { key: 'comisiones', label: 'Comisiones' },
-        { key: 'perfil', label: 'Mi perfil' },
-      ]}
-      activeStaff={[
-        { initials: obtenerIniciales(usuario.nombre), name: usuario.nombre, online: true },
-      ]}
+    <ScrollView
+      contentContainerStyle={{ paddingHorizontal: 24, paddingVertical: 20, gap: 20 }}
+      showsVerticalScrollIndicator={false}
     >
-      <View style={{ gap: 20 }}>
-        {/* Encabezado superior con fecha grande y acciones rápidas */}
-        <View
-          style={{
-            flexDirection: 'row',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            flexWrap: 'wrap',
-            gap: 12,
-          }}
-        >
-          <View>
-            <Text style={[BzTypography.title, { color: colors.BzText, fontWeight: '700' }]}>
-              {fechaLargaHoy()}
-            </Text>
-            <Text style={{ color: colors.BzMuted, fontSize: 13, marginTop: 2 }}>
-              Hola, {usuario.nombre} · {sucursalEtiqueta} · {resumen.citasHoy} citas hoy
-            </Text>
-          </View>
-
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-            <Pressable
-              onPress={() => setMostrarNotifs(true)}
-              style={{
-                paddingHorizontal: 14,
-                paddingVertical: 9,
-                borderRadius: 10,
-                backgroundColor: colors.BzCard,
-                borderWidth: 1,
-                borderColor: colors.BzBorder,
-              }}
-            >
-              <Text style={{ color: colors.BzText, fontSize: 12, fontWeight: '600' }}>
-                Avisos ({notifs.length})
-              </Text>
-            </Pressable>
-
-            <Pressable
-              onPress={() => setMostrarTema(true)}
-              style={{
-                paddingHorizontal: 14,
-                paddingVertical: 9,
-                borderRadius: 10,
-                backgroundColor: colors.BzCard,
-                borderWidth: 1,
-                borderColor: colors.BzBorder,
-              }}
-            >
-              <Text style={{ color: colors.BzText, fontSize: 12, fontWeight: '600' }}>
-                Tema
-              </Text>
-            </Pressable>
-
-            <Pressable
-              onPress={onIrNuevaCita}
-              style={{
-                paddingHorizontal: 16,
-                paddingVertical: 9,
-                borderRadius: 10,
-                backgroundColor: '#E2C46D',
-              }}
-            >
-              <Text style={{ color: '#141416', fontSize: 12, fontWeight: '800' }}>
-                + Nueva cita
-              </Text>
-            </Pressable>
-          </View>
+      {/* Encabezado superior con fecha grande y acciones rápidas */}
+      <View
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: 12,
+        }}
+      >
+        <View>
+          <Text style={[BzTypography.title, { color: colors.BzText, fontWeight: '700' }]}>
+            {fechaLargaHoy()}
+          </Text>
+          <Text style={{ color: colors.BzMuted, fontSize: 13, marginTop: 2 }}>
+            Hola, {usuario.nombre} · {sucursalEtiqueta} · {resumen.citasHoy} citas hoy
+          </Text>
         </View>
 
-        {/* Fila superior: 4 tarjetas KPI horizontales */}
-        <View style={{ flexDirection: 'row', gap: 14 }}>
-          <Tarjeta padding={16} radius={16} gap={4} style={{ flex: 1 }}>
-            <Text style={[BzTypography.bigNumber, { color: colors.BzText, fontSize: 30, fontWeight: '700' }]}>
-              {resumen.citasHoy}
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+          <Pressable
+            onPress={() => setMostrarNotifs(true)}
+            style={{
+              paddingHorizontal: 14,
+              paddingVertical: 9,
+              borderRadius: 10,
+              backgroundColor: colors.BzCard,
+              borderWidth: 1,
+              borderColor: colors.BzBorder,
+            }}
+          >
+            <Text style={{ color: colors.BzText, fontSize: 12, fontWeight: '600' }}>
+              Avisos ({notifs.length})
             </Text>
-            <Etiqueta texto="CITAS HOY" />
-            <Text style={{ color: colors.BzMuted, fontSize: 11 }}>
-              {resumen.enSilla > 0 ? `${resumen.enSilla} en silla ahora` : 'Agenda activa'}
-            </Text>
-          </Tarjeta>
+          </Pressable>
 
-          <Tarjeta padding={16} radius={16} gap={4} style={{ flex: 1 }}>
-            <Text style={[BzTypography.bigNumber, { color: colors.BzWarning, fontSize: 30, fontWeight: '700' }]}>
-              {resumen.porAtender}
+          <Pressable
+            onPress={() => setMostrarTema(true)}
+            style={{
+              paddingHorizontal: 14,
+              paddingVertical: 9,
+              borderRadius: 10,
+              backgroundColor: colors.BzCard,
+              borderWidth: 1,
+              borderColor: colors.BzBorder,
+            }}
+          >
+            <Text style={{ color: colors.BzText, fontSize: 12, fontWeight: '600' }}>
+              Tema
             </Text>
-            <Etiqueta texto="POR ATENDER" />
-            <Text style={{ color: colors.BzMuted, fontSize: 11 }}>
-              {resumen.porAtender === 1 ? 'Cliente pendiente' : 'Clientes pendientes'}
-            </Text>
-          </Tarjeta>
+          </Pressable>
 
-          <Tarjeta padding={16} radius={16} gap={4} style={{ flex: 1 }}>
-            <Text style={[BzTypography.bigNumber, { color: colors.BzText, fontSize: 30, fontWeight: '700' }]}>
-              {resumen.atendidosHoy}/{resumen.citasHoy}
+          <Pressable
+            onPress={onIrNuevaCita}
+            style={{
+              paddingHorizontal: 16,
+              paddingVertical: 9,
+              borderRadius: 10,
+              backgroundColor: '#E2C46D',
+            }}
+          >
+            <Text style={{ color: '#141416', fontSize: 12, fontWeight: '800' }}>
+              + Nueva cita
             </Text>
-            <Etiqueta texto="ATENDIDOS HOY" />
-            <Text style={{ color: colors.BzMuted, fontSize: 11 }}>
-              Sem: {resumen.atendidosSemana} · Total: {resumen.atendidosTotal}
-            </Text>
-          </Tarjeta>
-
-          <Pressable onPress={onIrComisiones} style={{ flex: 1 }}>
-            <Tarjeta padding={16} radius={16} gap={4} style={{ flex: 1 }}>
-              <Text style={[BzTypography.bigNumber, { color: colors.BzSuccess, fontSize: 30, fontWeight: '700' }]}>
-                ${comisionHoy}
-              </Text>
-              <Etiqueta texto="COMISIÓN HOY" />
-              <Text style={{ color: colors.BzMuted, fontSize: 11 }}>
-                Ver desglose ›
-              </Text>
-            </Tarjeta>
           </Pressable>
         </View>
-
-        {/* Fila inferior: 2 paneles lado a lado */}
-        <View style={{ flexDirection: 'row', gap: 18, alignItems: 'flex-start' }}>
-          {renderListaClientesHoy()}
-          {renderTarjetaSilla()}
-        </View>
       </View>
-    </DesktopShell>
+
+      {/* Fila superior: 3 tarjetas KPI horizontales */}
+      <View style={{ flexDirection: 'row', gap: 14 }}>
+        <Tarjeta padding={16} radius={16} gap={4} style={{ flex: 1 }}>
+          <Text style={[BzTypography.bigNumber, { color: colors.BzText, fontSize: 30, fontWeight: '700' }]}>
+            {resumen.citasHoy}
+          </Text>
+          <Etiqueta texto="CITAS HOY" />
+          <Text style={{ color: colors.BzMuted, fontSize: 11 }}>
+            {resumen.enSilla > 0 ? `${resumen.enSilla} en silla ahora` : 'Agenda activa'}
+          </Text>
+        </Tarjeta>
+
+        <Tarjeta padding={16} radius={16} gap={4} style={{ flex: 1 }}>
+          <Text style={[BzTypography.bigNumber, { color: colors.BzWarning, fontSize: 30, fontWeight: '700' }]}>
+            {resumen.porAtender}
+          </Text>
+          <Etiqueta texto="POR ATENDER" />
+          <Text style={{ color: colors.BzMuted, fontSize: 11 }}>
+            {resumen.porAtender === 1 ? 'Cliente pendiente' : 'Clientes pendientes'}
+          </Text>
+        </Tarjeta>
+
+        <Tarjeta padding={16} radius={16} gap={4} style={{ flex: 1 }}>
+          <Text style={[BzTypography.bigNumber, { color: colors.BzText, fontSize: 30, fontWeight: '700' }]}>
+            {resumen.atendidosHoy}/{resumen.citasHoy}
+          </Text>
+          <Etiqueta texto="ATENDIDOS HOY" />
+          <Text style={{ color: colors.BzMuted, fontSize: 11 }}>
+            Sem: {resumen.atendidosSemana} · Total: {resumen.atendidosTotal}
+          </Text>
+        </Tarjeta>
+      </View>
+
+      {/* Fila inferior: 2 paneles lado a lado */}
+      <View style={{ flexDirection: 'row', gap: 18, alignItems: 'flex-start' }}>
+        {renderListaClientesHoy()}
+        {renderTarjetaSilla()}
+      </View>
+    </ScrollView>
   );
 
   return (
@@ -614,55 +572,36 @@ export const VistaInicioBarbero: React.FC<{
           {renderTarjetaSilla()}
 
           {/* Métricas del día en móvil */}
-          <View style={{ gap: 10 }}>
-            <View style={{ flexDirection: 'row', gap: 10 }}>
-              <Tarjeta padding={12} radius={12} gap={4} style={{ flex: 1 }}>
-                <Etiqueta texto="CITAS HOY" />
-                <Text style={[BzTypography.bigNumber, { color: colors.BzText, fontSize: 24 }]}>
-                  {resumen.citasHoy}
-                </Text>
-                <Text style={{ color: colors.BzMuted, fontSize: 11 }}>
-                  {resumen.enSilla > 0 ? `${resumen.enSilla} en silla ahora` : 'Agenda activa'}
-                </Text>
-              </Tarjeta>
+          <View style={{ flexDirection: 'row', gap: 10 }}>
+            <Tarjeta padding={12} radius={12} gap={4} style={{ flex: 1 }}>
+              <Etiqueta texto="CITAS HOY" />
+              <Text style={[BzTypography.bigNumber, { color: colors.BzText, fontSize: 24 }]}>
+                {resumen.citasHoy}
+              </Text>
+              <Text style={{ color: colors.BzMuted, fontSize: 11 }}>
+                {resumen.enSilla > 0 ? `${resumen.enSilla} en silla` : 'Agenda activa'}
+              </Text>
+            </Tarjeta>
 
-              <Tarjeta padding={12} radius={12} gap={4} style={{ flex: 1 }}>
-                <Etiqueta texto="ATENDIDOS HOY" />
-                <Text style={[BzTypography.bigNumber, { color: colors.BzText, fontSize: 24 }]}>
-                  {resumen.atendidosHoy} de {resumen.citasHoy}
-                </Text>
-                <Text style={{ color: colors.BzMuted, fontSize: 11 }}>
-                  Sem: {resumen.atendidosSemana} · Total: {resumen.atendidosTotal}
-                </Text>
-              </Tarjeta>
-            </View>
+            <Tarjeta padding={12} radius={12} gap={4} style={{ flex: 1 }}>
+              <Etiqueta texto="ATENDIDOS" />
+              <Text style={[BzTypography.bigNumber, { color: colors.BzText, fontSize: 24 }]}>
+                {resumen.atendidosHoy}/{resumen.citasHoy}
+              </Text>
+              <Text style={{ color: colors.BzMuted, fontSize: 11 }}>
+                Sem: {resumen.atendidosSemana}
+              </Text>
+            </Tarjeta>
 
-            <View style={{ flexDirection: 'row', gap: 10 }}>
-              <Tarjeta padding={12} radius={12} gap={4} style={{ flex: 1 }}>
-                <Etiqueta texto="POR ATENDER" />
-                <Text style={[BzTypography.bigNumber, { color: colors.BzText, fontSize: 24 }]}>
-                  {resumen.porAtender}
-                </Text>
-                <Text style={{ color: colors.BzMuted, fontSize: 11 }}>
-                  {resumen.porAtender === 1 ? 'Cliente pendiente' : 'Clientes pendientes'}
-                </Text>
-              </Tarjeta>
-
-              <Pressable onPress={onIrComisiones} style={{ flex: 1 }}>
-                <Tarjeta padding={12} radius={12} gap={4} style={{ flex: 1 }}>
-                  <Fila>
-                    <Etiqueta texto="COMISIÓN HOY" />
-                    <Text style={{ color: colors.BzMuted, fontSize: 11 }}>›</Text>
-                  </Fila>
-                  <Text style={[BzTypography.bigNumber, { color: colors.BzSuccess, fontSize: 24 }]}>
-                    ${comisionHoy}
-                  </Text>
-                  <Text style={{ color: colors.BzMuted, fontSize: 11 }}>
-                    Ver desglose
-                  </Text>
-                </Tarjeta>
-              </Pressable>
-            </View>
+            <Tarjeta padding={12} radius={12} gap={4} style={{ flex: 1 }}>
+              <Etiqueta texto="PENDIENTES" />
+              <Text style={[BzTypography.bigNumber, { color: colors.BzWarning, fontSize: 24 }]}>
+                {resumen.porAtender}
+              </Text>
+              <Text style={{ color: colors.BzMuted, fontSize: 11 }}>
+                Por atender
+              </Text>
+            </Tarjeta>
           </View>
 
           {renderListaClientesHoy()}
@@ -678,7 +617,7 @@ export const VistaInicioBarbero: React.FC<{
                 <BotonSecundario texto="+ Nueva cita" height={42} onPress={onIrNuevaCita} />
               </View>
               <View style={{ flex: 1 }}>
-                <BotonSecundario texto="Comisiones" height={42} onPress={onIrComisiones} />
+                <BotonSecundario texto="En silla" height={42} onPress={onIrServicio} />
               </View>
             </View>
           </Tarjeta>

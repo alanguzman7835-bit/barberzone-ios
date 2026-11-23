@@ -1,7 +1,8 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { Image, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { CameraView, useCameraPermissions, type BarcodeScanningResult } from 'expo-camera';
 import { useBzTheme } from '../constants/BzTheme';
+import { useCatalogoConfig } from '../constants/CatalogoConfigContext';
 import { RolSesion, UsuarioBz } from '../constants/Sesion';
 import {
   BotonMini,
@@ -21,10 +22,12 @@ import {
 type SubVista = 'STOCK' | 'RECIBIR_QR' | 'TRASPASOS' | 'COMPRAS' | 'CONTEO_MERMAS';
 
 interface ProductoInventario {
-  id: number;
+  id: string;
   nombre: string;
   sku: string;
   categoria: string;
+  sucursal: string;
+  imagenUrl: string;
   stockActual: number;
   stockMinimo: number;
   costoUnitario: number;
@@ -41,45 +44,53 @@ interface MovimientoInventario {
 }
 
 /**
- * Módulo de Inventario:
+ * Módulo de Inventario sincronizado con la Base de Datos / Tienda:
  * - Recepción/Cajero: SOLO lectura de stock, traspasos y entrada obligatoria por escaneo QR de cajas.
  * - Dueño / Encargado: Control total (escanear QR, compras manuales, reabastecimiento rápido y conteo/mermas).
  */
 export const InventarioScreen: React.FC<{ usuario: UsuarioBz }> = ({ usuario }) => {
+  const { colors } = useBzTheme();
+  const { productos: productosDB, actualizarProducto } = useCatalogoConfig();
   const esGerencia = usuario.rol === RolSesion.DUENO || usuario.rol === RolSesion.ENCARGADO;
 
   const [subVista, setSubVista] = useState<SubVista>('STOCK');
   const [escanerQrAbierto, setEscanerQrAbierto] = useState(false);
 
-  const [productos, setProductos] = useState<ProductoInventario[]>([
-    { id: 1, nombre: 'Pomada mate 100g', sku: 'BZ-POM-01', categoria: 'Estilizado', stockActual: 4, stockMinimo: 8, costoUnitario: 95, precioVenta: 220, piezasPorCaja: 12 },
-    { id: 2, nombre: 'Aceite barba 30ml', sku: 'BZ-ACE-02', categoria: 'Barba', stockActual: 14, stockMinimo: 6, costoUnitario: 75, precioVenta: 180, piezasPorCaja: 12 },
-    { id: 3, nombre: 'Shampoo menta 250ml', sku: 'BZ-SHA-03', categoria: 'Lavado', stockActual: 3, stockMinimo: 6, costoUnitario: 65, precioVenta: 150, piezasPorCaja: 6 },
-    { id: 4, nombre: 'Navajas doradas (100 pz)', sku: 'BZ-NAV-04', categoria: 'Insumo', stockActual: 2, stockMinimo: 5, costoUnitario: 110, precioVenta: 0, piezasPorCaja: 10 },
-    { id: 5, nombre: 'Cera fuerte 100g', sku: 'BZ-CER-05', categoria: 'Estilizado', stockActual: 11, stockMinimo: 5, costoUnitario: 90, precioVenta: 210, piezasPorCaja: 12 },
-    { id: 6, nombre: 'Talco cuello 200g', sku: 'BZ-TAL-06', categoria: 'Insumo', stockActual: 9, stockMinimo: 4, costoUnitario: 45, precioVenta: 0, piezasPorCaja: 8 },
-  ]);
+  // Mapea directamente los productos reales de la Base de Datos / Tienda (0 si está vacía)
+  const productos: ProductoInventario[] = useMemo(
+    () =>
+      productosDB.map((p, idx) => ({
+        id: p.id,
+        nombre: p.nombre,
+        sku: `BZ-${p.categoria.slice(0, 3).toUpperCase()}-${String(idx + 1).padStart(2, '0')}`,
+        categoria: p.categoria,
+        sucursal: p.sucursal,
+        imagenUrl: p.imagenUrl,
+        stockActual: p.stock,
+        stockMinimo: p.stockMinimo,
+        costoUnitario: Math.round(p.precio * 0.45),
+        precioVenta: p.precio,
+        piezasPorCaja: 12,
+      })),
+    [productosDB],
+  );
 
-  const [historial, setHistorial] = useState<MovimientoInventario[]>([
-    { id: 1, tipo: 'Entrada QR', detalle: 'Caja QR BZ-ACE-02 · +12 Aceite barba 30ml', estado: 'Verificado', fecha: 'Hoy · 09:40' },
-    { id: 2, tipo: 'Traspaso', detalle: 'Olivete → Centro · 6 Pomada mate', estado: 'En tránsito', fecha: 'Hoy · 11:10' },
-    { id: 3, tipo: 'Compra', detalle: 'Proveedor BarberSupply · $2,450', estado: 'Recibida', fecha: 'Ayer · 17:30' },
-    { id: 4, tipo: 'Merma', detalle: '1 Shampoo menta (envase roto)', estado: 'Registrada', fecha: '15 nov' },
-  ]);
+  const [historial, setHistorial] = useState<MovimientoInventario[]>([]);
 
   const agregarMov = (tipo: string, detalle: string, estado: string) =>
-    setHistorial((h) => [{ id: Math.max(0, ...h.map((m) => m.id)) + 1, tipo, detalle, estado, fecha: 'Ahora' }, ...h]);
+    setHistorial((h) => [
+      { id: Math.max(0, ...h.map((m) => m.id)) + 1, tipo, detalle, estado, fecha: 'Ahora' },
+      ...h,
+    ]);
 
   /**
-   * Procesa el código QR de la caja recibida.
-   * Formatos aceptados:
-   * - "BZ-POM-01:12" (SKU y cantidad exacta de piezas de la caja)
-   * - "BZ-POM-01" (SKU solo -> suma las piezasPorCaja configuradas)
-   * - JSON {"sku":"BZ-POM-01","piezas":12}
+   * Procesa el código QR de la caja recibida y suma el stock directo en Supabase.
    */
   const procesarQrCajaRecibida = (
     codigoRaw: string,
-  ): { ok: true; producto: ProductoInventario; piezasSumadas: number; nuevoStock: number } | { ok: false; motivo: string } => {
+  ):
+    | { ok: true; producto: ProductoInventario; piezasSumadas: number; nuevoStock: number }
+    | { ok: false; motivo: string } => {
     const limpio = codigoRaw.trim();
     if (!limpio) {
       return { ok: false, motivo: 'El código QR está vacío.' };
@@ -111,20 +122,20 @@ export const InventarioScreen: React.FC<{ usuario: UsuarioBz }> = ({ usuario }) 
       skuLeido = limpio.toUpperCase();
     }
 
-    const prod = productos.find((p) => p.sku.toUpperCase() === skuLeido);
+    const prod = productos.find(
+      (p) => p.sku.toUpperCase() === skuLeido || p.nombre.toUpperCase() === skuLeido,
+    );
     if (!prod) {
       return {
         ok: false,
-        motivo: `El código "${skuLeido}" no corresponde a ningún producto del catálogo.`,
+        motivo: `El código "${skuLeido}" no corresponde a ningún producto registrado.`,
       };
     }
 
     const piezasSumadas = piezasLeidas ?? prod.piezasPorCaja;
     const nuevoStock = prod.stockActual + piezasSumadas;
 
-    setProductos((ps) =>
-      ps.map((p) => (p.id === prod.id ? { ...p, stockActual: nuevoStock } : p)),
-    );
+    void actualizarProducto(prod.id, { stock: nuevoStock });
 
     agregarMov(
       'Entrada QR',
@@ -135,7 +146,6 @@ export const InventarioScreen: React.FC<{ usuario: UsuarioBz }> = ({ usuario }) 
     return { ok: true, producto: prod, piezasSumadas, nuevoStock };
   };
 
-  // Pestañas según el rol: Recepción NO tiene Compras manuales ni Conteo/Merma
   const pestanas: { titulo: string; vista: SubVista }[] = esGerencia
     ? [
         { titulo: 'Stock', vista: 'STOCK' },
@@ -152,24 +162,40 @@ export const InventarioScreen: React.FC<{ usuario: UsuarioBz }> = ({ usuario }) 
 
   return (
     <View style={{ flex: 1 }}>
+      {/* Pestañas superiores estilo cápsula */}
       <View style={{ flexGrow: 0 }}>
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
-          contentContainerStyle={{ paddingHorizontal: 20, paddingVertical: 10, gap: 8 }}
+          contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 14, paddingBottom: 8, gap: 8 }}
         >
-          {pestanas.map((p) => (
-            <ChipTexto
-              key={p.vista}
-              texto={p.titulo}
-              padH={14}
-              padV={8}
-              apagado
-              negrita
-              activo={subVista === p.vista}
-              onPress={() => setSubVista(p.vista)}
-            />
-          ))}
+          {pestanas.map((p) => {
+            const activo = subVista === p.vista;
+            return (
+              <Pressable
+                key={p.vista}
+                onPress={() => setSubVista(p.vista)}
+                style={{
+                  paddingHorizontal: 16,
+                  paddingVertical: 9,
+                  borderRadius: 999,
+                  backgroundColor: activo ? '#F3F4F6' : colors.BzCard,
+                  borderWidth: 1,
+                  borderColor: activo ? '#F3F4F6' : colors.BzBorder,
+                }}
+              >
+                <Text
+                  style={{
+                    color: activo ? '#0D0D0D' : colors.BzMuted,
+                    fontSize: 12.5,
+                    fontWeight: activo ? '700' : '600',
+                  }}
+                >
+                  {p.titulo}
+                </Text>
+              </Pressable>
+            );
+          })}
         </ScrollView>
       </View>
 
@@ -181,7 +207,7 @@ export const InventarioScreen: React.FC<{ usuario: UsuarioBz }> = ({ usuario }) 
           onAbrirEscanerQr={() => setEscanerQrAbierto(true)}
           onReabastecerRapido={(item) => {
             if (!esGerencia) return;
-            setProductos((ps) => ps.map((p) => (p.id === item.id ? { ...p, stockActual: p.stockActual + 5 } : p)));
+            void actualizarProducto(item.id, { stock: item.stockActual + 5 });
             agregarMov('Ajuste rápido', `+5 pz ${item.nombre} (${usuario.nombre})`, 'Aplicado');
           }}
           onIrCompras={() => {
@@ -207,7 +233,7 @@ export const InventarioScreen: React.FC<{ usuario: UsuarioBz }> = ({ usuario }) 
           onRegistrar={(prod, destino, cant) => {
             const actual = productos.find((p) => p.id === prod.id);
             if (actual && actual.stockActual >= cant) {
-              setProductos((ps) => ps.map((p) => (p.id === prod.id ? { ...p, stockActual: p.stockActual - cant } : p)));
+              void actualizarProducto(prod.id, { stock: actual.stockActual - cant });
               agregarMov('Traspaso', `${usuario.sucursal} → ${destino} · ${cant} ${prod.nombre}`, 'En tránsito');
             }
           }}
@@ -219,8 +245,12 @@ export const InventarioScreen: React.FC<{ usuario: UsuarioBz }> = ({ usuario }) 
           productos={productos}
           movimientos={historial}
           onConfirmar={(prod, proveedor, cant) => {
-            setProductos((ps) => ps.map((p) => (p.id === prod.id ? { ...p, stockActual: p.stockActual + cant } : p)));
-            agregarMov('Compra', `${proveedor} · +${cant} ${prod.nombre} ($${prod.costoUnitario * cant})`, 'Recibida');
+            void actualizarProducto(prod.id, { stock: prod.stockActual + cant });
+            agregarMov(
+              'Compra',
+              `${proveedor} · +${cant} ${prod.nombre} ($${prod.costoUnitario * cant})`,
+              'Recibida',
+            );
           }}
         />
       )}
@@ -232,7 +262,7 @@ export const InventarioScreen: React.FC<{ usuario: UsuarioBz }> = ({ usuario }) 
           onAplicarAjuste={(prod, nuevoStock, motivo) => {
             const diff = nuevoStock - prod.stockActual;
             const signo = diff >= 0 ? `+${diff}` : `${diff}`;
-            setProductos((ps) => ps.map((p) => (p.id === prod.id ? { ...p, stockActual: nuevoStock } : p)));
+            void actualizarProducto(prod.id, { stock: nuevoStock });
             agregarMov('Ajuste / Merma', `${prod.nombre} (${signo} pz) · ${motivo}`, 'Aplicado');
           }}
         />
@@ -247,6 +277,354 @@ export const InventarioScreen: React.FC<{ usuario: UsuarioBz }> = ({ usuario }) 
         />
       </BzSheet>
     </View>
+  );
+};
+
+/* ---------- Vista Existencias (Sincronizada con las fotos de la Tienda) ---------- */
+
+const VistaStockGeneral: React.FC<{
+  usuario: UsuarioBz;
+  esGerencia: boolean;
+  productos: ProductoInventario[];
+  onAbrirEscanerQr: () => void;
+  onReabastecerRapido: (p: ProductoInventario) => void;
+  onIrCompras: () => void;
+}> = ({ esGerencia, productos, onAbrirEscanerQr, onReabastecerRapido, onIrCompras }) => {
+  const { colors } = useBzTheme();
+  const [filtro, setFiltro] = useState('Todos');
+  const [busqueda, setBusqueda] = useState('');
+
+  const bajos = productos.filter((p) => p.stockActual <= p.stockMinimo);
+  const valorInventario = productos.reduce((a, p) => a + p.stockActual * p.costoUnitario, 0);
+
+  const lista = useMemo(() => {
+    const porCategoria =
+      filtro === 'Stock bajo'
+        ? bajos
+        : filtro === 'Venta'
+        ? productos.filter((p) => p.precioVenta > 0)
+        : filtro === 'Insumos'
+        ? productos.filter((p) => p.precioVenta === 0)
+        : productos;
+
+    const q = busqueda.trim().toLowerCase();
+    if (!q) return porCategoria;
+    return porCategoria.filter(
+      (p) =>
+        p.nombre.toLowerCase().includes(q) ||
+        p.sku.toLowerCase().includes(q) ||
+        p.categoria.toLowerCase().includes(q) ||
+        p.sucursal.toLowerCase().includes(q),
+    );
+  }, [productos, bajos, filtro, busqueda]);
+
+  return (
+    <ScrollView
+      contentContainerStyle={{ paddingHorizontal: 20, paddingVertical: 10, gap: 14, paddingBottom: 32 }}
+      showsVerticalScrollIndicator={false}
+    >
+      {/* Encabezado: Inventario + botones QR de caja y + Compra */}
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+        <View>
+          <Text style={{ color: colors.BzText, fontSize: 24, fontWeight: '800' }}>
+            Inventario
+          </Text>
+          <Text style={{ color: colors.BzMuted, fontSize: 12.5, marginTop: 2 }}>
+            {productos.length} {productos.length === 1 ? 'artículo' : 'artículos'}
+          </Text>
+        </View>
+
+        <View style={{ flexDirection: 'row', gap: 8 }}>
+          <Pressable
+            onPress={onAbrirEscanerQr}
+            style={{
+              height: 40,
+              paddingHorizontal: 14,
+              borderRadius: 11,
+              backgroundColor: colors.BzCard,
+              borderWidth: 1,
+              borderColor: colors.BzBorder,
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <Text style={{ color: colors.BzText, fontSize: 12.5, fontWeight: '700' }}>
+              QR de caja
+            </Text>
+          </Pressable>
+
+          {esGerencia && (
+            <Pressable
+              onPress={onIrCompras}
+              style={{
+                height: 40,
+                paddingHorizontal: 15,
+                borderRadius: 11,
+                backgroundColor: '#E2C46D',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <Text style={{ color: '#141416', fontSize: 12.5, fontWeight: '800' }}>
+                + Compra
+              </Text>
+            </Pressable>
+          )}
+        </View>
+      </View>
+
+      {/* 2 Tarjetas métricas superiores */}
+      <View style={{ flexDirection: 'row', gap: 12 }}>
+        <View
+          style={{
+            flex: 1,
+            backgroundColor: colors.BzCard,
+            borderRadius: 14,
+            borderWidth: 1,
+            borderColor: colors.BzBorder,
+            padding: 16,
+            gap: 6,
+          }}
+        >
+          <Text style={{ color: colors.BzMuted, fontSize: 12 }}>
+            {esGerencia ? 'Valor en costo' : 'Piezas totales'}
+          </Text>
+          <Text style={{ color: colors.BzText, fontSize: 24, fontWeight: '800' }}>
+            {esGerencia
+              ? `$${valorInventario.toLocaleString('en-US')}`
+              : `${productos.reduce((a, p) => a + p.stockActual, 0)} pz`}
+          </Text>
+        </View>
+
+        <View
+          style={{
+            flex: 1,
+            backgroundColor: colors.BzCard,
+            borderRadius: 14,
+            borderWidth: 1,
+            borderColor: colors.BzBorder,
+            padding: 16,
+            gap: 6,
+          }}
+        >
+          <Text style={{ color: colors.BzMuted, fontSize: 12 }}>Stock bajo</Text>
+          <Text
+            style={{
+              color: bajos.length > 0 ? '#E2C46D' : colors.BzSuccess,
+              fontSize: 24,
+              fontWeight: '800',
+            }}
+          >
+            {bajos.length} {bajos.length === 1 ? 'artículo' : 'artículos'}
+          </Text>
+        </View>
+      </View>
+
+      {/* Fila de filtros en cápsula + Buscador */}
+      <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+        {['Todos', 'Stock bajo', 'Venta', 'Insumos'].map((f) => {
+          const activo = filtro === f;
+          return (
+            <Pressable
+              key={f}
+              onPress={() => setFiltro(f)}
+              style={{
+                height: 36,
+                paddingHorizontal: 14,
+                borderRadius: 999,
+                backgroundColor: activo ? '#221E14' : colors.BzCard,
+                borderWidth: 1,
+                borderColor: activo ? '#E2C46D' : colors.BzBorder,
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <Text
+                style={{
+                  color: activo ? '#E2C46D' : colors.BzMuted,
+                  fontSize: 12,
+                  fontWeight: activo ? '700' : '600',
+                }}
+              >
+                {f}
+              </Text>
+            </Pressable>
+          );
+        })}
+
+        <TextInput
+          value={busqueda}
+          onChangeText={setBusqueda}
+          placeholder="Buscar producto"
+          placeholderTextColor={colors.BzMuted}
+          style={{
+            flex: 1,
+            minWidth: 170,
+            height: 36,
+            borderRadius: 999,
+            backgroundColor: colors.BzCard,
+            borderWidth: 1,
+            borderColor: colors.BzBorder,
+            paddingHorizontal: 14,
+            color: colors.BzText,
+            fontSize: 12.5,
+          }}
+        />
+      </View>
+
+      {/* Grid de productos con la misma foto de la Tienda */}
+      {lista.length === 0 ? (
+        <Tarjeta padding={24} radius={14} gap={6}>
+          <Text style={{ color: colors.BzText, fontSize: 14, fontWeight: '700' }}>
+            {productos.length === 0
+              ? 'El inventario está vacío (0 artículos)'
+              : 'Sin artículos encontrados'}
+          </Text>
+          <Text style={{ color: colors.BzMuted, fontSize: 12 }}>
+            {productos.length === 0
+              ? 'Agrega tus productos en Reportes → Base de datos y App Cliente para verlos aquí con su foto y stock sincronizados.'
+              : 'Prueba con otro filtro o limpia la búsqueda.'}
+          </Text>
+        </Tarjeta>
+      ) : (
+        <View style={styles.gridProductos}>
+          {lista.map((prod) => {
+            const esBajo = prod.stockActual <= prod.stockMinimo;
+            const etiquetaSecundaria = prod.precioVenta > 0 ? prod.categoria : 'Uso interno';
+
+            return (
+              <View
+                key={prod.id}
+                style={[
+                  styles.cardProducto,
+                  {
+                    backgroundColor: colors.BzCard,
+                    borderColor: esBajo ? '#4D4123' : colors.BzBorder,
+                  },
+                ]}
+              >
+                {/* Misma foto del producto que en la Tienda */}
+                <View
+                  style={{
+                    width: 58,
+                    height: 58,
+                    borderRadius: 12,
+                    backgroundColor: colors.BzBg,
+                    borderWidth: 1,
+                    borderColor: colors.BzBorder,
+                    overflow: 'hidden',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  {prod.imagenUrl ? (
+                    <Image
+                      source={{ uri: prod.imagenUrl }}
+                      style={{ width: '100%', height: '100%' }}
+                      resizeMode="cover"
+                    />
+                  ) : (
+                    <View
+                      style={{
+                        width: 14,
+                        height: 14,
+                        borderRadius: 3,
+                        borderWidth: 1.5,
+                        borderColor: colors.BzMuted,
+                      }}
+                    />
+                  )}
+                </View>
+
+                {/* Info central: Nombre + Chip categoría + Precio */}
+                <View style={{ flex: 1, gap: 6, paddingRight: 6 }}>
+                  <Text
+                    style={{ color: colors.BzText, fontSize: 14, fontWeight: '700' }}
+                    numberOfLines={1}
+                  >
+                    {prod.nombre}
+                  </Text>
+
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <View
+                      style={{
+                        paddingHorizontal: 9,
+                        paddingVertical: 3,
+                        borderRadius: 999,
+                        backgroundColor: colors.BzBg,
+                        borderWidth: 1,
+                        borderColor: colors.BzBorder,
+                      }}
+                    >
+                      <Text style={{ color: colors.BzMuted, fontSize: 11 }}>
+                        {etiquetaSecundaria}
+                      </Text>
+                    </View>
+
+                    {prod.precioVenta > 0 && (
+                      <Text style={{ color: colors.BzText, fontSize: 12, fontWeight: '700' }}>
+                        ${prod.precioVenta}
+                      </Text>
+                    )}
+                  </View>
+                </View>
+
+                {/* Columna derecha: Stock + Mínimo + Botón +5 rápido */}
+                <View style={{ alignItems: 'flex-end', justifyContent: 'center', gap: 4 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <View
+                      style={{
+                        width: 7,
+                        height: 7,
+                        borderRadius: 3.5,
+                        backgroundColor: esBajo ? '#E2C46D' : colors.BzSuccess,
+                      }}
+                    />
+                    <Text
+                      style={{
+                        color: esBajo ? '#E2C46D' : colors.BzText,
+                        fontSize: 18,
+                        fontWeight: '800',
+                      }}
+                    >
+                      {prod.stockActual} pz
+                    </Text>
+                  </View>
+
+                  {esBajo && (
+                    <Text style={{ color: colors.BzMuted, fontSize: 10.5 }}>
+                      mín. {prod.stockMinimo}
+                    </Text>
+                  )}
+
+                  {esGerencia && esBajo && (
+                    <Pressable
+                      onPress={() => onReabastecerRapido(prod)}
+                      style={({ pressed }) => [
+                        {
+                          marginTop: 2,
+                          paddingHorizontal: 10,
+                          paddingVertical: 5,
+                          borderRadius: 8,
+                          backgroundColor: colors.BzBg,
+                          borderWidth: 1,
+                          borderColor: colors.BzBorder,
+                        },
+                        pressed && { opacity: 0.8 },
+                      ]}
+                    >
+                      <Text style={{ color: colors.BzText, fontSize: 11, fontWeight: '700' }}>
+                        +5 rápido
+                      </Text>
+                    </Pressable>
+                  )}
+                </View>
+              </View>
+            );
+          })}
+        </View>
+      )}
+    </ScrollView>
   );
 };
 
@@ -280,19 +658,25 @@ const VistaRecepcionQrMercancia: React.FC<{
       <Tarjeta padding={14} radius={14} gap={8}>
         <Etiqueta texto="CÓDIGOS SKU DE REFERENCIA" />
         <Text style={{ color: colors.BzMuted, fontSize: 11 }}>
-          Cada caja trae su código QR con formato SKU:PIEZAS (ejemplo: BZ-POM-01:12).
+          Cada caja trae su código QR con formato SKU:PIEZAS (ejemplo: BZ-CRE-01:12).
         </Text>
         <Divisor />
-        {productos.map((p) => (
-          <Fila key={p.id}>
-            <Text style={{ color: colors.BzText, fontSize: 12, flex: 1 }}>
-              {p.nombre}
-            </Text>
-            <Text style={{ color: colors.BzMuted, fontSize: 11 }}>
-              {p.sku} · Caja {p.piezasPorCaja} pz · Disp: {p.stockActual}
-            </Text>
-          </Fila>
-        ))}
+        {productos.length === 0 ? (
+          <Text style={{ color: colors.BzMuted, fontSize: 12 }}>
+            No hay productos registrados en el catálogo.
+          </Text>
+        ) : (
+          productos.map((p) => (
+            <Fila key={p.id}>
+              <Text style={{ color: colors.BzText, fontSize: 12, flex: 1 }}>
+                {p.nombre}
+              </Text>
+              <Text style={{ color: colors.BzMuted, fontSize: 11 }}>
+                {p.sku} · Caja {p.piezasPorCaja} pz · Disp: {p.stockActual}
+              </Text>
+            </Fila>
+          ))
+        )}
       </Tarjeta>
 
       <Etiqueta texto={`ENTRADAS POR QR REGISTRADAS (${entradasQr.length})`} />
@@ -307,7 +691,9 @@ const EscanerQrCajaSheet: React.FC<{
   productos: ProductoInventario[];
   onProcesarQr: (
     codigo: string,
-  ) => { ok: true; producto: ProductoInventario; piezasSumadas: number; nuevoStock: number } | { ok: false; motivo: string };
+  ) =>
+    | { ok: true; producto: ProductoInventario; piezasSumadas: number; nuevoStock: number }
+    | { ok: false; motivo: string };
   onCerrar: () => void;
 }> = ({ productos, onProcesarQr, onCerrar }) => {
   const { colors } = useBzTheme();
@@ -486,7 +872,6 @@ const EscanerQrCajaSheet: React.FC<{
         </View>
       )}
 
-      {/* Opción secundaria por si el QR impreso en la caja viene roto/mojado */}
       <Pressable
         onPress={() => setMostrarPrueba((v) => !v)}
         style={{ alignItems: 'center', paddingVertical: 4 }}
@@ -520,7 +905,7 @@ const EscanerQrCajaSheet: React.FC<{
               setCodigoPrueba(t);
               setErrorQr(null);
             }}
-            placeholder="Ej. BZ-POM-01:12"
+            placeholder="Ej. BZ-CRE-01:12"
             placeholderTextColor={colors.BzMuted}
             autoCapitalize="characters"
             style={[
@@ -547,16 +932,6 @@ const EscanerQrCajaSheet: React.FC<{
 };
 
 /* ---------- Auxiliares ---------- */
-
-const CardMetricaInv: React.FC<{ titulo: string; valor: string; colorValor?: string }> = ({ titulo, valor, colorValor }) => {
-  const { colors } = useBzTheme();
-  return (
-    <Tarjeta padding={12} radius={12} gap={4} style={{ flex: 1 }}>
-      <Text style={{ color: colors.BzMuted, fontSize: 9, letterSpacing: 1 }}>{titulo}</Text>
-      <Text style={{ color: colorValor ?? colors.BzText, fontSize: 17, fontWeight: '600' }}>{valor}</Text>
-    </Tarjeta>
-  );
-};
 
 const ListaMovimientos: React.FC<{ lista: MovimientoInventario[] }> = ({ lista }) => {
   const { colors } = useBzTheme();
@@ -639,127 +1014,6 @@ const MensajeOk: React.FC<{ texto: string | null }> = ({ texto }) => {
   return texto ? <Text style={{ color: colors.BzSuccess, fontSize: 12 }}>{texto}</Text> : null;
 };
 
-/* ---------- Vista 13: Existencias (con control de permisos por rol) ---------- */
-
-const VistaStockGeneral: React.FC<{
-  usuario: UsuarioBz;
-  esGerencia: boolean;
-  productos: ProductoInventario[];
-  onAbrirEscanerQr: () => void;
-  onReabastecerRapido: (p: ProductoInventario) => void;
-  onIrCompras: () => void;
-}> = ({ usuario, esGerencia, productos, onAbrirEscanerQr, onReabastecerRapido, onIrCompras }) => {
-  const { colors } = useBzTheme();
-  const [filtro, setFiltro] = useState('Todos');
-
-  const bajos = productos.filter((p) => p.stockActual <= p.stockMinimo);
-  const valorInventario = productos.reduce((a, p) => a + p.stockActual * p.costoUnitario, 0);
-
-  const lista =
-    filtro === 'Stock bajo'
-      ? bajos
-      : filtro === 'Venta'
-      ? productos.filter((p) => p.precioVenta > 0)
-      : filtro === 'Insumos'
-      ? productos.filter((p) => p.precioVenta === 0)
-      : productos;
-
-  return (
-    <ScrollView
-      contentContainerStyle={{ paddingHorizontal: 20, paddingVertical: 8, gap: 12, paddingBottom: 24 }}
-      showsVerticalScrollIndicator={false}
-    >
-      <Fila>
-        <View style={{ flex: 1 }}>
-          <Titulo texto={`Inventario · ${usuario.sucursal}`} />
-          <Text style={{ color: colors.BzMuted, fontSize: 12 }}>
-            {productos.length} artículos · {esGerencia ? 'Control total' : 'Solo lectura y entrada por QR'}
-          </Text>
-        </View>
-        <View style={{ flexDirection: 'row', gap: 6 }}>
-          <Pressable
-            onPress={onAbrirEscanerQr}
-            style={{ borderRadius: 10, backgroundColor: colors.BzText, paddingHorizontal: 11, paddingVertical: 7 }}
-          >
-            <Text style={{ color: colors.BzBg, fontSize: 11, fontWeight: '600' }}>📷 QR Caja</Text>
-          </Pressable>
-          {/* Solo Dueño o Encargado pueden registrar compras/altas manuales */}
-          {esGerencia && (
-            <Pressable
-              onPress={onIrCompras}
-              style={{ borderRadius: 10, borderWidth: 1, borderColor: colors.BzBorder, paddingHorizontal: 10, paddingVertical: 7 }}
-            >
-              <Text style={{ color: colors.BzText, fontSize: 11, fontWeight: '600' }}>+ Compra</Text>
-            </Pressable>
-          )}
-        </View>
-      </Fila>
-
-      <View style={{ flexDirection: 'row', gap: 8 }}>
-        <CardMetricaInv
-          titulo={esGerencia ? 'VALOR EN COSTO' : 'PIEZAS TOTALES'}
-          valor={
-            esGerencia
-              ? `$${valorInventario}`
-              : `${productos.reduce((a, p) => a + p.stockActual, 0)} pz`
-          }
-        />
-        <CardMetricaInv
-          titulo="ALERTAS STOCK BAJO"
-          valor={`${bajos.length} ítems`}
-          colorValor={bajos.length > 0 ? colors.BzWarning : colors.BzSuccess}
-        />
-      </View>
-
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
-        {['Todos', 'Stock bajo', 'Venta', 'Insumos'].map((f) => (
-          <ChipTexto key={f} texto={f} size={11} activo={filtro === f} onPress={() => setFiltro(f)} />
-        ))}
-      </ScrollView>
-
-      {lista.map((prod) => {
-        const esBajo = prod.stockActual <= prod.stockMinimo;
-        return (
-          <Tarjeta key={prod.id} gap={0} borderColor={esBajo ? colors.BzWarning : undefined}>
-            <Fila>
-              <View style={{ flex: 1, gap: 2 }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                  <View style={{ width: 7, height: 7, borderRadius: 3.5, backgroundColor: esBajo ? colors.BzWarning : colors.BzSuccess }} />
-                  <Text style={{ color: colors.BzText, fontSize: 14, fontWeight: '500', flexShrink: 1 }}>{prod.nombre}</Text>
-                </View>
-                <Text style={{ color: colors.BzMuted, fontSize: 11 }}>
-                  {prod.sku} · {prod.categoria} · Mín: {prod.stockMinimo} pz
-                </Text>
-                <Text style={{ color: colors.BzMuted, fontSize: 11 }}>
-                  {prod.precioVenta > 0
-                    ? esGerencia
-                      ? `Costo $${prod.costoUnitario} · Venta $${prod.precioVenta}`
-                      : `Precio venta: $${prod.precioVenta} · Caja ${prod.piezasPorCaja} pz`
-                    : `Insumo interno · Caja ${prod.piezasPorCaja} pz`}
-                </Text>
-              </View>
-              <View style={{ alignItems: 'flex-end', gap: 6 }}>
-                <Text style={{ color: esBajo ? colors.BzWarning : colors.BzText, fontSize: 16, fontWeight: '600' }}>
-                  {prod.stockActual} pz
-                </Text>
-                {/* El botón de +5 rápido se oculta completamente para Recepción */}
-                {esGerencia && esBajo && (
-                  <Pressable
-                    onPress={() => onReabastecerRapido(prod)}
-                    style={{ borderRadius: 8, backgroundColor: colors.BzBg, borderWidth: 1, borderColor: colors.BzBorder, paddingHorizontal: 8, paddingVertical: 4 }}
-                  >
-                    <Text style={{ color: colors.BzText, fontSize: 10 }}>+5 rápido</Text>
-                  </Pressable>
-                )}
-              </View>
-            </Fila>
-          </Tarjeta>
-        );
-      })}
-    </ScrollView>
-  );
-};
-
 /* ---------- Vista 19: Traspasos ---------- */
 
 const VistaTraspasos: React.FC<{
@@ -772,8 +1026,20 @@ const VistaTraspasos: React.FC<{
   const destinos = ['Centro', 'Providencia', 'Zapopan'].filter((s) => s !== usuario.sucursal);
   const [destinoSel, setDestinoSel] = useState(destinos[0] ?? 'Centro');
   const [idx, setIdx] = useState(0);
-  const [cantidad, setCantidad] = useState(2);
+  const [cantidad, setCantidad] = useState(1);
   const [mensaje, setMensaje] = useState<string | null>(null);
+
+  if (productos.length === 0) {
+    return (
+      <ScrollView contentContainerStyle={{ paddingHorizontal: 20, paddingVertical: 12 }}>
+        <Tarjeta padding={18} radius={14}>
+          <Text style={{ color: colors.BzMuted, fontSize: 13 }}>
+            Agrega productos en Base de datos para poder realizar traspasos.
+          </Text>
+        </Tarjeta>
+      </ScrollView>
+    );
+  }
 
   const prod = productos[idx] ?? productos[0];
   const valido = prod.stockActual >= cantidad && cantidad > 0;
@@ -845,6 +1111,18 @@ const VistaCompras: React.FC<{
   const [cantidad, setCantidad] = useState(10);
   const [mensaje, setMensaje] = useState<string | null>(null);
 
+  if (productos.length === 0) {
+    return (
+      <ScrollView contentContainerStyle={{ paddingHorizontal: 20, paddingVertical: 12 }}>
+        <Tarjeta padding={18} radius={14}>
+          <Text style={{ color: colors.BzMuted, fontSize: 13 }}>
+            Registra primero tus productos en Base de datos para cargar compras.
+          </Text>
+        </Tarjeta>
+      </ScrollView>
+    );
+  }
+
   const prod = productos[idx] ?? productos[0];
   const totalEstimado = prod.costoUnitario * cantidad;
 
@@ -864,7 +1142,16 @@ const VistaCompras: React.FC<{
 
       <View style={{ flexDirection: 'row', gap: 8 }}>
         {[5, 10, 20, 50].map((lote) => (
-          <ChipTexto key={lote} texto={`+${lote} pz`} centrado padH={4} padV={8} style={{ flex: 1 }} activo={cantidad === lote} onPress={() => setCantidad(lote)} />
+          <ChipTexto
+            key={lote}
+            texto={`+${lote} pz`}
+            centrado
+            padH={4}
+            padV={8}
+            style={{ flex: 1 }}
+            activo={cantidad === lote}
+            onPress={() => setCantidad(lote)}
+          />
         ))}
       </View>
 
@@ -901,14 +1188,28 @@ const VistaConteoYMermas: React.FC<{
   const { colors } = useBzTheme();
   const [idx, setIdx] = useState(0);
   const prod = productos[idx] ?? productos[0];
-  const [conteo, setConteo] = useState(Math.max(0, prod.stockActual - 1));
+  const [conteo, setConteo] = useState(prod ? Math.max(0, prod.stockActual - 1) : 0);
   const [motivo, setMotivo] = useState('Consumo interno en estación');
   const [mensaje, setMensaje] = useState<string | null>(null);
 
   useEffect(() => {
-    setConteo(Math.max(0, prod.stockActual - 1));
+    if (prod) {
+      setConteo(Math.max(0, prod.stockActual - 1));
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [prod.id]);
+  }, [prod?.id]);
+
+  if (!prod) {
+    return (
+      <ScrollView contentContainerStyle={{ paddingHorizontal: 20, paddingVertical: 12 }}>
+        <Tarjeta padding={18} radius={14}>
+          <Text style={{ color: colors.BzMuted, fontSize: 13 }}>
+            No hay productos en inventario para realizar conteo físico.
+          </Text>
+        </Tarjeta>
+      </ScrollView>
+    );
+  }
 
   return (
     <ScrollView contentContainerStyle={{ paddingHorizontal: 20, paddingVertical: 8, gap: 12 }} keyboardShouldPersistTaps="handled">
@@ -947,6 +1248,21 @@ const VistaConteoYMermas: React.FC<{
 };
 
 const styles = StyleSheet.create({
+  gridProductos: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  cardProducto: {
+    flex: 1,
+    minWidth: 310,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: 14,
+    gap: 14,
+  },
   camaraWrapper: {
     height: 230,
     borderRadius: 16,

@@ -2075,7 +2075,7 @@ export const MainAppShell: React.FC<{
   usuario: UsuarioBz;
   onLogout: () => void;
 }> = ({ usuario, onLogout }) => {
-  const { colors, } = useBzTheme();
+  const { colors } = useBzTheme();
   const insets = useSafeAreaInsets();
   const { isDesktop } = useDesktopLayout();
   const { empleados } = useCatalogoConfig();
@@ -2439,6 +2439,8 @@ export const MainAppShell: React.FC<{
   }
 
   /* ===== EN MÓVIL: BARRA FLOTANTE INFERIOR CON SAFE AREA ===== */
+  const esOscuro = colors.BzBg.startsWith('#0') || colors.BzBg.startsWith('#1');
+
   return (
     <View
       style={{
@@ -2447,13 +2449,7 @@ export const MainAppShell: React.FC<{
         paddingTop: Math.max(insets.top, 12),
       }}
     >
-      <StatusBar
-        barStyle={
-          colors.BzBg.startsWith('#0') || colors.BzBg.startsWith('#1')
-            ? 'light-content'
-            : 'dark-content'
-        }
-      />
+      <StatusBar barStyle={esOscuro ? 'light-content' : 'dark-content'} />
 
       <View style={{ flex: 1 }}>{renderContenido()}</View>
 

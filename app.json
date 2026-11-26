@@ -7,13 +7,13 @@
     "icon": "./assets/images/icon.png",
     "scheme": "barberzones",
     "userInterfaceStyle": "dark",
-    "backgroundColor": "#0D0D0D",
+    "backgroundColor": "#0A0A0A",
     "ios": {
       "icon": "./assets/expo.icon",
-      "backgroundColor": "#0D0D0D"
+      "backgroundColor": "#0A0A0A"
     },
     "android": {
-      "backgroundColor": "#0D0D0D",
+      "backgroundColor": "#0A0A0A",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -23,7 +23,7 @@
       "predictiveBackGestureEnabled": false
     },
     "androidNavigationBar": {
-      "backgroundColor": "#0D0D0D",
+      "backgroundColor": "#0A0A0A",
       "barStyle": "light-content"
     },
     "web": {
@@ -31,8 +31,8 @@
       "display": "standalone",
       "name": "BarberZone",
       "shortName": "BarberZone",
-      "backgroundColor": "#0D0D0D",
-      "themeColor": "#0D0D0D",
+      "backgroundColor": "#0A0A0A",
+      "themeColor": "#0A0A0A",
       "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
@@ -40,7 +40,7 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#0D0D0D",
+          "backgroundColor": "#0A0A0A",
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 76
         }

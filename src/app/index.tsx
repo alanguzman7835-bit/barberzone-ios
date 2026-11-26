@@ -9,7 +9,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle, Path, Rect } from 'react-native-svg';
 import { CampoContrasenaAnimado, CasillasPin, EstadoPin } from '../components/Animaciones';
 import { MainAppShell } from '../components/MenuPrincipal';
@@ -328,7 +328,6 @@ const CrearCuentaScreen: React.FC<{ onBack: () => void; onCreada: (u: UsuarioBz)
         comisionProductos: '',
       };
 
-      // Guardado directo y confirmado en Supabase
       const { error: errDB } = await supabase.from('usuarios').insert({
         id: nuevoUsuario.id,
         usuario: nuevoUsuario.usuario,
@@ -626,6 +625,7 @@ class LimiteErrores extends React.Component<
 
 function AppRouter() {
   const { colors } = useBzTheme();
+  const insets = useSafeAreaInsets();
   const [screen, setScreen] = useState<Screen>('BIENVENIDA');
   const [usuarioActual, setUsuarioActual] = useState<UsuarioBz | null>(null);
   const [listaUsuariosDemo, setListaUsuariosDemo] = useState<UsuarioBz[]>(() => getUsuariosDemoPorRol());
@@ -642,9 +642,12 @@ function AppRouter() {
   }, [screen]);
 
   return (
-    <SafeAreaView
-      edges={['top', 'left', 'right']}
-      style={{ flex: 1, backgroundColor: colors.BzBg }}
+    <View
+      style={{
+        flex: 1,
+        backgroundColor: colors.BzBg,
+        paddingTop: insets.top,
+      }}
     >
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
         <TransicionVistaBz vistaKey={screen}>
@@ -703,7 +706,7 @@ function AppRouter() {
           )}
         </TransicionVistaBz>
       </KeyboardAvoidingView>
-    </SafeAreaView>
+    </View>
   );
 }
 

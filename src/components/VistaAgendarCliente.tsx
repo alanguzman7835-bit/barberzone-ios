@@ -19,6 +19,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle, Line, Path, Rect } from 'react-native-svg';
 
 import { BzTypography, useBzTheme } from '../constants/BzTheme';
+import { useCatalogoConfig } from '../constants/CatalogoConfigContext';
 import ComprobantePedidoCard from './ComprobantePedidoCard';
 
 /* =====================================================================
@@ -136,8 +137,7 @@ export type BarberoItem = {
   nombre: string;
   especialidad: string;
   calificacion: string;
-  diasLaborales: number[]; // 0 = Dom, 1 = Lun ... 6 = Sáb
-  /** Horas ocupadas por fecha ('YYYY-MM-DD') o con la clave 'hoy'. */
+  diasLaborales: number[];
   horasOcupadas?: Record<string, string[]>;
 };
 
@@ -150,13 +150,9 @@ export type CitaConfirmadaData = {
   clienteNombre: string;
   sucursal: string;
   creadaEn: string;
-  /** Fecha de la cita en formato 'YYYY-MM-DD' (la usa el calendario). */
   fechaISO: string;
-  /** Hora de inicio en formato 24 h. */
   hora24: number;
-  /** Descripción que escribió el cliente (opcional). */
   notas?: string;
-  /** Foto de referencia del corte (opcional). */
   fotoUri?: string;
 };
 
@@ -180,9 +176,7 @@ type Props = {
   sucursalNombre?: string;
   servicios?: ServicioItem[];
   barberos?: BarberoItem[];
-  /** Todas las citas del cliente (viene del estado de MainAppShell). */
   citasActivas?: CitaConfirmadaData[];
-  /** Pedidos apartados en la tienda, pendientes por recoger. */
   pedidosPendientes?: PedidoApartadoData[];
   onCitaConfirmada?: (cita: CitaConfirmadaData, resumenCorto: string) => void;
   onIrTienda?: () => void;
@@ -291,7 +285,7 @@ const MESES_LARGO = [
   'Noviembre',
   'Diciembre',
 ];
-const DIAS_CALENDARIO = ['L', 'M', 'M', 'J', 'V', 'S', 'D']; // semana empieza en lunes
+const DIAS_CALENDARIO = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
 
 const SIN_CITAS: CitaConfirmadaData[] = [];
 const SIN_PEDIDOS: PedidoApartadoData[] = [];
@@ -304,7 +298,6 @@ const mxn = (n: number) => `$${String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d
 
 const pad = (n: number) => String(n).padStart(2, '0');
 
-/** 'YYYY-MM-DD' en hora local (evita el desfase de toISOString). */
 function claveDia(d: Date): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
@@ -336,7 +329,6 @@ export function citasOrdenadas(citas: CitaConfirmadaData[]): CitaConfirmadaData[
   return [...citas].sort((a, b) => fechaHoraCita(a).getTime() - fechaHoraCita(b).getTime());
 }
 
-/** Citas que aún no pasan (se conserva una hora de gracia después de iniciar). */
 export function citasPendientesOrdenadas(
   citas: CitaConfirmadaData[],
   ahora: Date = new Date(),
@@ -360,7 +352,6 @@ function nuevoFolio(existentes: string[]): string {
   return folio;
 }
 
-/** Barras del "código de verificación": siempre iguales para el mismo folio. */
 function barrasDeFolio(folio: string): number[] {
   const base = folio.replace(/\D/g, '').padEnd(4, '0');
   const barras: number[] = [];
@@ -372,7 +363,7 @@ function barrasDeFolio(folio: string): number[] {
 }
 
 type DiaAgenda = {
-  key: string; // 'YYYY-MM-DD'
+  key: string;
   esHoy: boolean;
   etiquetaTop: string;
   numeroDia: string;
@@ -384,7 +375,6 @@ type DiaAgenda = {
 function generarProximosDias(cantidad = 7): DiaAgenda[] {
   const hoy = new Date();
   const ultimaHora = HORARIOS_BASE[HORARIOS_BASE.length - 1].hora24;
-  // Si ya pasó el último horario del día, "Hoy" no se ofrece
   const empezarManana = hoy.getHours() >= ultimaHora;
   const lista: DiaAgenda[] = [];
   for (let i = empezarManana ? 1 : 0; lista.length < cantidad; i++) {
@@ -406,10 +396,6 @@ function generarProximosDias(cantidad = 7): DiaAgenda[] {
   return lista;
 }
 
-/**
- * expo-image-picker es opcional: si no está instalado, la app sigue funcionando.
- * Para activarlo:  npx expo install expo-image-picker
- */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function cargarImagePicker(): any | null {
   try {
@@ -421,7 +407,7 @@ function cargarImagePicker(): any | null {
 }
 
 /* =====================================================================
-   Comprobante / Pase oficial (reutilizable: lo usa también VistaInicioCliente)
+   Comprobante / Pase oficial
    ===================================================================== */
 
 export function ComprobanteCitaCard({
@@ -442,7 +428,6 @@ export function ComprobanteCitaCard({
 
   return (
     <View style={[styles.paseCard, { backgroundColor: colors.BzCard, borderColor: colors.BzBorder }]}>
-      {/* Encabezado del pase */}
       <View style={styles.paseTopRow}>
         <View style={[styles.paseBadgeOk, { backgroundColor: colors.BzText }]}>
           <Icono nombre="check" size={13} color={colors.BzBg} />
@@ -454,7 +439,6 @@ export function ComprobanteCitaCard({
       <Text style={[styles.paseMarca, { color: colors.BzMuted }]}>PASE DE RECEPCIÓN · BARBERZONE</Text>
       <Text style={[styles.paseServicio, { color: colors.BzText }]}>{cita.servicio.titulo}</Text>
 
-      {/* Línea punteada tipo boleto */}
       <View style={styles.paseDividerWrap}>
         <View style={[styles.paseMuescaIzq, { backgroundColor: colors.BzBg }]} />
         <View style={[styles.paseLineaPunteada, { borderColor: colors.BzBorder }]} />
@@ -494,7 +478,6 @@ export function ComprobanteCitaCard({
         </View>
       </View>
 
-      {/* Notas y foto de referencia, si el cliente las agregó */}
       {!!cita.notas && (
         <View style={{ marginTop: 14 }}>
           <Text style={[styles.paseLabel, { color: colors.BzMuted }]}>DESCRIPCIÓN DEL CORTE</Text>
@@ -512,7 +495,6 @@ export function ComprobanteCitaCard({
         </View>
       )}
 
-      {/* Código visual de verificación para recepción */}
       <View style={[styles.paseCodigoBox, { backgroundColor: colors.BzBg, borderColor: colors.BzBorder }]}>
         <View style={styles.barrasRow}>
           {barras.map((w, idx) => (
@@ -687,7 +669,6 @@ function CalendarioCitas({
     return mapa;
   }, [citas]);
 
-  // Celdas del mes: huecos al inicio (semana en lunes) + días
   const celdas = useMemo(() => {
     const primero = new Date(mes.y, mes.m, 1);
     const offset = (primero.getDay() + 6) % 7;
@@ -703,7 +684,6 @@ function CalendarioCitas({
 
   return (
     <View style={[styles.card, { backgroundColor: colors.BzCard, borderColor: colors.BzBorder }]}>
-      {/* Encabezado del mes */}
       <View style={styles.calHeader}>
         <Pressable
           onPress={() => onMes(-1)}
@@ -726,7 +706,6 @@ function CalendarioCitas({
         </Pressable>
       </View>
 
-      {/* Días de la semana */}
       <View style={styles.calFila}>
         {DIAS_CALENDARIO.map((d, i) => (
           <View key={`${d}-${i}`} style={styles.calCelda}>
@@ -735,7 +714,6 @@ function CalendarioCitas({
         ))}
       </View>
 
-      {/* Cuadrícula */}
       <View style={styles.calFila}>
         {celdas.map((dia, idx) => {
           if (dia === null) return <View key={`v-${idx}`} style={styles.calCelda} />;
@@ -779,13 +757,11 @@ function CalendarioCitas({
         })}
       </View>
 
-      {/* Leyenda */}
       <View style={styles.calLeyenda}>
         <View style={[styles.calPunto, { position: 'relative', bottom: 0, backgroundColor: colors.BzSuccess }]} />
         <Text style={{ color: colors.BzMuted, fontSize: 11 }}>Día con cita agendada</Text>
       </View>
 
-      {/* Detalle del día tocado */}
       <View style={[styles.calDetalle, { borderTopColor: colors.BzBorder }]}>
         <Text style={{ color: colors.BzText, fontSize: 14, fontWeight: '600' }}>
           {etiquetaDiaLarga(diaSel)}
@@ -848,8 +824,18 @@ export function VistaAgendarCliente({
   espacioInferior = 36,
 }: Props) {
   const { colors } = useBzTheme();
+  const { imagenesServicios } = useCatalogoConfig();
   const insets = useSafeAreaInsets();
   const { height: altoPantalla } = useWindowDimensions();
+
+  // Conecta cada servicio con su fotografía configurada por el Dueño
+  const serviciosConImagen = useMemo(() => {
+    return servicios.map((srv) => {
+      if (srv.imagen) return srv;
+      const url = imagenesServicios?.[srv.titulo] || imagenesServicios?.[srv.id];
+      return url ? { ...srv, imagen: { uri: url } } : srv;
+    });
+  }, [servicios, imagenesServicios]);
 
   const [paso, setPaso] = useState<Paso>('hub');
 
@@ -880,7 +866,6 @@ export function VistaAgendarCliente({
   const altoTarjetaFeed = Math.max(220, Math.round(altoPantalla * 0.37));
   const topSeguro = (aplicarSafeArea ? insets.top : 0) + 12;
 
-  // Horarios del día elegido (si es hoy, solo los que faltan; se bloquean los que ya tiene ocupados)
   const horarios = useMemo(() => {
     const horaActual = new Date().getHours();
     const bloqueadas = new Set(
@@ -892,7 +877,6 @@ export function VistaAgendarCliente({
     }));
   }, [diaElegido, citasActivas]);
 
-  // Mantiene una hora válida al cambiar de día
   useEffect(() => {
     if (paso !== 'formulario') return;
     const libres = horarios.filter((h) => !h.bloqueada);
@@ -901,7 +885,6 @@ export function VistaAgendarCliente({
     }
   }, [horarios, paso, horaElegida]);
 
-  // Solo barberos en turno ese día y libres a esa hora
   const barberosDisponibles = useMemo(() => {
     if (!horaElegida) return [];
     return barberos.filter((b) => {
@@ -994,7 +977,6 @@ export function VistaAgendarCliente({
     };
 
     setCitaGenerada(nueva);
-    // El calendario del Hub se coloca en el día de la cita nueva
     setDiaSel(nueva.fechaISO);
     const f = fechaDesdeClave(nueva.fechaISO);
     setMesVista({ y: f.getFullYear(), m: f.getMonth() });
@@ -1076,7 +1058,6 @@ export function VistaAgendarCliente({
             <Text style={{ color: colors.BzMuted, fontSize: 13 }}>Cambiar servicio</Text>
           </Pressable>
 
-          {/* Resumen del servicio elegido */}
           <View
             style={[styles.servicioResumenCard, { backgroundColor: colors.BzCard, borderColor: colors.BzBorder }]}
           >
@@ -1094,7 +1075,6 @@ export function VistaAgendarCliente({
             </Text>
           </View>
 
-          {/* 1. Día */}
           <Text style={[styles.seccionLabel, { color: colors.BzMuted }]}>1. ELIGE EL DÍA</Text>
           <ScrollView
             horizontal
@@ -1141,7 +1121,6 @@ export function VistaAgendarCliente({
             })}
           </ScrollView>
 
-          {/* 2. Hora */}
           <Text style={[styles.seccionLabel, { color: colors.BzMuted }]}>2. ELIGE LA HORA</Text>
           <View style={styles.horasGrid}>
             {horarios.map((h) => {
@@ -1184,7 +1163,6 @@ export function VistaAgendarCliente({
             </Text>
           )}
 
-          {/* 3. Barberos disponibles */}
           <View style={styles.barberosHeader}>
             <Text style={[styles.seccionLabel, { color: colors.BzMuted, marginTop: 0, marginBottom: 0 }]}>
               3. ESTOS BARBEROS ESTÁN DISPONIBLES
@@ -1270,7 +1248,6 @@ export function VistaAgendarCliente({
             </View>
           )}
 
-          {/* 4. Descripción (opcional) */}
           <Text style={[styles.seccionLabel, { color: colors.BzMuted }]}>4. CUÉNTANOS QUÉ QUIERES (OPCIONAL)</Text>
           <TextInput
             value={notas}
@@ -1288,7 +1265,6 @@ export function VistaAgendarCliente({
             {notas.length}/280
           </Text>
 
-          {/* 5. Foto de referencia (opcional) */}
           <Text style={[styles.seccionLabel, { color: colors.BzMuted }]}>5. FOTO DE REFERENCIA (OPCIONAL)</Text>
           {fotoUri ? (
             <View style={[styles.fotoBox, { borderColor: colors.BzBorder, backgroundColor: colors.BzCard }]}>
@@ -1332,7 +1308,6 @@ export function VistaAgendarCliente({
             </Pressable>
           )}
 
-          {/* Confirmar */}
           <Pressable
             disabled={!puedeConfirmar}
             onPress={confirmarCita}
@@ -1388,27 +1363,48 @@ export function VistaAgendarCliente({
           </View>
 
           <View style={{ gap: 18 }}>
-            {servicios.map((srv) => {
+            {serviciosConImagen.map((srv) => {
               const contenido = (
                 <View
                   style={[
                     styles.feedCardInner,
-                    { backgroundColor: srv.imagen ? 'rgba(0, 0, 0, 0.48)' : 'transparent' },
+                    { backgroundColor: srv.imagen ? 'rgba(0, 0, 0, 0.50)' : 'transparent' },
                   ]}
                 >
                   <View style={styles.feedTopRow}>
-                    <View style={[styles.duracionPill, { backgroundColor: colors.BzCardInner }]}>
-                      <Icono nombre="reloj" size={12} color={colors.BzText} />
-                      <Text style={{ color: colors.BzText, fontSize: 11, fontWeight: '500' }}>
+                    <View
+                      style={[
+                        styles.duracionPill,
+                        { backgroundColor: srv.imagen ? 'rgba(18, 18, 18, 0.78)' : colors.BzCardInner },
+                      ]}
+                    >
+                      <Icono nombre="reloj" size={12} color={srv.imagen ? '#FFFFFF' : colors.BzText} />
+                      <Text
+                        style={{
+                          color: srv.imagen ? '#FFFFFF' : colors.BzText,
+                          fontSize: 11,
+                          fontWeight: '500',
+                        }}
+                      >
                         {srv.duracion}
                       </Text>
                     </View>
-                    <Text style={[styles.feedPrecio, { color: colors.BzText }]}>{mxn(srv.precio)}</Text>
+                    <Text style={[styles.feedPrecio, { color: srv.imagen ? '#FFFFFF' : colors.BzText }]}>
+                      {mxn(srv.precio)}
+                    </Text>
                   </View>
 
                   <View>
-                    <Text style={[styles.feedTitulo, { color: colors.BzText }]}>{srv.titulo}</Text>
-                    <Text style={[styles.feedSubtitulo, { color: colors.BzMuted }]} numberOfLines={2}>
+                    <Text style={[styles.feedTitulo, { color: srv.imagen ? '#FFFFFF' : colors.BzText }]}>
+                      {srv.titulo}
+                    </Text>
+                    <Text
+                      style={[
+                        styles.feedSubtitulo,
+                        { color: srv.imagen ? 'rgba(255, 255, 255, 0.82)' : colors.BzMuted },
+                      ]}
+                      numberOfLines={2}
+                    >
                       {srv.subtitulo}
                     </Text>
                   </View>
@@ -1477,7 +1473,6 @@ export function VistaAgendarCliente({
           <Text style={[BzTypography.title, { color: colors.BzText, marginTop: 4 }]}>Tus citas</Text>
         </View>
 
-        {/* Botón principal hasta arriba */}
         <Pressable
           onPress={empezarNuevaCita}
           accessibilityRole="button"
@@ -1492,7 +1487,6 @@ export function VistaAgendarCliente({
           <Text style={[styles.botonPrimarioTexto, { color: colors.BzBg }]}>Agendar nueva cita</Text>
         </Pressable>
 
-        {/* Bloque 1: citas pendientes + productos por recoger */}
         <View style={[styles.card, { backgroundColor: colors.BzCard, borderColor: colors.BzBorder }]}>
           {!hayAlgoPendiente ? (
             <View style={styles.vacioWrap}>
@@ -1521,7 +1515,6 @@ export function VistaAgendarCliente({
             </View>
           ) : (
             <>
-              {/* Citas */}
               <View style={styles.seccionTitulo}>
                 <Text style={[BzTypography.label, { color: colors.BzMuted }]}>CITAS PENDIENTES</Text>
                 {pendientes.length > 0 && (
@@ -1552,7 +1545,6 @@ export function VistaAgendarCliente({
 
               <View style={[styles.divisor, { backgroundColor: colors.BzBorder }]} />
 
-              {/* Productos */}
               <View style={styles.seccionTitulo}>
                 <Text style={[BzTypography.label, { color: colors.BzMuted }]}>PRODUCTOS POR RECOGER</Text>
                 {pedidosPendientes.length > 0 && (
@@ -1579,7 +1571,6 @@ export function VistaAgendarCliente({
           )}
         </View>
 
-        {/* Bloque 2: calendario interactivo */}
         <View style={{ marginTop: 16 }}>
           <CalendarioCitas
             citas={citasActivas}
@@ -1592,7 +1583,6 @@ export function VistaAgendarCliente({
         </View>
       </ScrollView>
 
-      {/* Pase de recepción de cualquier cita */}
       <Modal
         visible={!!paseModal}
         transparent
@@ -1612,7 +1602,6 @@ export function VistaAgendarCliente({
         </View>
       </Modal>
 
-      {/* Ticket oficial de cualquier pedido apartado */}
       <Modal
         visible={!!ticketModal}
         transparent
@@ -1652,7 +1641,6 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
 
-  /* tarjetas generales */
   card: {
     borderRadius: 22,
     borderWidth: 1,
@@ -1695,7 +1683,6 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
 
-  /* estado vacío */
   vacioWrap: {
     alignItems: 'center',
     paddingVertical: 18,
@@ -1710,7 +1697,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
 
-  /* calendario */
   calHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1769,7 +1755,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
 
-  /* botón principal */
   botonPrimario: {
     height: 52,
     borderRadius: 18,
@@ -1794,7 +1779,6 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
 
-  /* feed vertical de servicios */
   feedCard: {
     borderRadius: 28,
     borderWidth: 1,
@@ -1841,7 +1825,6 @@ const styles = StyleSheet.create({
     marginTop: 6,
   },
 
-  /* formulario */
   backRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1986,7 +1969,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
 
-  /* comprobante */
   paseCard: {
     borderRadius: 26,
     borderWidth: 1,

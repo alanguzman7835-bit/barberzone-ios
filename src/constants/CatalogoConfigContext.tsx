@@ -127,11 +127,15 @@ async function subirArchivoASupabase(uri: string, carpeta: string): Promise<stri
       .from('app-assets')
       .upload(rutaArchivo, arrayBuffer, { contentType: 'image/jpeg', upsert: true });
 
-    if (uploadError) return uri;
+    if (uploadError) {
+      console.warn('[Storage] Error al subir imagen:', uploadError.message);
+      return uri;
+    }
 
     const { data } = supabase.storage.from('app-assets').getPublicUrl(rutaArchivo);
     return data.publicUrl;
-  } catch {
+  } catch (err) {
+    console.warn('[Storage] Excepción al procesar imagen:', err);
     return uri;
   }
 }
@@ -164,7 +168,9 @@ export const CatalogoConfigProvider: React.FC<{ children: React.ReactNode }> = (
     try {
       if (typeof window !== 'undefined' && window.localStorage) {
         const raw = window.localStorage.getItem(STORAGE_SERVICIOS_KEY);
-        if (raw) return JSON.parse(raw);
+        if (raw) {
+          return { ...SERVICIOS_IMAGENES_INICIALES, ...JSON.parse(raw) };
+        }
       }
     } catch {}
     return SERVICIOS_IMAGENES_INICIALES;
@@ -215,8 +221,9 @@ export const CatalogoConfigProvider: React.FC<{ children: React.ReactNode }> = (
         try {
           const parsedSrv = JSON.parse(srvConfig.imagen_url);
           if (parsedSrv && typeof parsedSrv === 'object') {
-            setImagenesServicios(parsedSrv);
-            persistirServiciosLocal(parsedSrv);
+            const combinado = { ...SERVICIOS_IMAGENES_INICIALES, ...parsedSrv };
+            setImagenesServicios(combinado);
+            persistirServiciosLocal(combinado);
           }
         } catch {}
       }

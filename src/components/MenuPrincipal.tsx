@@ -2,11 +2,13 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   Pressable,
   ScrollView,
+  StatusBar,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle, Line, Path, Rect } from 'react-native-svg';
 import {
   citaDeCliente,
@@ -2073,7 +2075,8 @@ export const MainAppShell: React.FC<{
   usuario: UsuarioBz;
   onLogout: () => void;
 }> = ({ usuario, onLogout }) => {
-  const { colors } = useBzTheme();
+  const { colors, } = useBzTheme();
+  const insets = useSafeAreaInsets();
   const { isDesktop } = useDesktopLayout();
   const { empleados } = useCatalogoConfig();
   const {
@@ -2435,12 +2438,34 @@ export const MainAppShell: React.FC<{
     );
   }
 
-  /* ===== EN MÓVIL: BARRA FLOTANTE INFERIOR ===== */
+  /* ===== EN MÓVIL: BARRA FLOTANTE INFERIOR CON SAFE AREA ===== */
   return (
-    <View style={{ flex: 1, backgroundColor: colors.BzBg }}>
+    <View
+      style={{
+        flex: 1,
+        backgroundColor: colors.BzBg,
+        paddingTop: Math.max(insets.top, 12),
+      }}
+    >
+      <StatusBar
+        barStyle={
+          colors.BzBg.startsWith('#0') || colors.BzBg.startsWith('#1')
+            ? 'light-content'
+            : 'dark-content'
+        }
+      />
+
       <View style={{ flex: 1 }}>{renderContenido()}</View>
 
-      <View style={{ backgroundColor: colors.BzBg, paddingHorizontal: 10, paddingVertical: 10 }}>
+      <View
+        style={{
+          backgroundColor: colors.BzBg,
+          paddingHorizontal: 10,
+          paddingTop: 8,
+          paddingBottom: Math.max(insets.bottom, 10),
+          zIndex: 50,
+        }}
+      >
         <GooeyNavBar
           items={gooeyItems}
           selectedIndex={indiceActual}

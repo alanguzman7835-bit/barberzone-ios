@@ -642,7 +642,10 @@ function AppRouter() {
   }, [screen]);
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: colors.BzBg }}>
+    <SafeAreaView
+      edges={['top', 'left', 'right']}
+      style={{ flex: 1, backgroundColor: colors.BzBg }}
+    >
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
         <TransicionVistaBz vistaKey={screen}>
           {screen === 'BIENVENIDA' && (

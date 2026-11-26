@@ -8,6 +8,7 @@ import {
   Text,
   TextInput,
   View,
+  useWindowDimensions,
   type ImageSourcePropType,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -43,6 +44,13 @@ type Props = {
   onVerEnAgenda: () => void;
   aplicarSafeArea?: boolean;
 };
+
+/* =====================================================================
+   Constantes de layout (idénticas a VistaInicioCliente)
+   ===================================================================== */
+
+const MARGEN = 20;
+const GAP = 12;
 
 /* =====================================================================
    Categorías visuales
@@ -98,7 +106,11 @@ export function VistaTiendaCliente({
   const { colors } = useBzTheme();
   const { productos, obtenerImagenSeccion } = useCatalogoConfig();
   const insets = useSafeAreaInsets();
-  const topSeguro = (aplicarSafeArea ? insets.top : 0) + 12;
+  const { width: windowWidth } = useWindowDimensions();
+  const [anchoContenedor, setAnchoContenedor] = useState(windowWidth);
+
+  // Mismo cálculo de topSeguro que VistaInicioCliente
+  const topSeguro = (aplicarSafeArea ? insets.top : 0) + 8;
 
   const [busqueda, setBusqueda] = useState('');
   const [categoriaActiva, setCategoriaActiva] = useState<CategoriaId | null>(null);
@@ -114,6 +126,11 @@ export function VistaTiendaCliente({
     () => productos.filter((p) => p.activo).map(convertirProductoDB),
     [productos],
   );
+
+  // Columnas adaptables: 2 en móvil, 3 o 4 en pantalla ancha de PC
+  const columnas = anchoContenedor >= 900 ? 4 : anchoContenedor >= 620 ? 3 : 2;
+  const anchoTarjetaGrid =
+    (anchoContenedor - MARGEN * 2 - GAP * (columnas - 1)) / columnas;
 
   const cantidadEnBolsa = (id: string) => bolsa.find((l) => l.id === id)?.cantidad ?? 0;
   const totalArticulos = useMemo(() => bolsa.reduce((s, l) => s + l.cantidad, 0), [bolsa]);
@@ -223,7 +240,15 @@ export function VistaTiendaCliente({
                 >
                   <Text style={{ color: colors.BzText, fontSize: 13, fontWeight: '600' }}>−</Text>
                 </Pressable>
-                <Text style={{ color: colors.BzText, fontSize: 12, fontWeight: '700', minWidth: 14, textAlign: 'center' }}>
+                <Text
+                  style={{
+                    color: colors.BzText,
+                    fontSize: 12,
+                    fontWeight: '700',
+                    minWidth: 14,
+                    textAlign: 'center',
+                  }}
+                >
                   {qty}
                 </Text>
                 <Pressable
@@ -300,7 +325,15 @@ export function VistaTiendaCliente({
                         >
                           <Text style={{ color: colors.BzText, fontSize: 14 }}>−</Text>
                         </Pressable>
-                        <Text style={{ color: colors.BzText, fontSize: 13, fontWeight: '700', minWidth: 18, textAlign: 'center' }}>
+                        <Text
+                          style={{
+                            color: colors.BzText,
+                            fontSize: 13,
+                            fontWeight: '700',
+                            minWidth: 18,
+                            textAlign: 'center',
+                          }}
+                        >
                           {linea.cantidad}
                         </Text>
                         <Pressable
@@ -412,18 +445,30 @@ export function VistaTiendaCliente({
      VISTA PRINCIPAL DE TIENDA
      ===================================================================== */
   return (
-    <View style={{ flex: 1, backgroundColor: colors.BzBg }}>
+    <View
+      style={{ flex: 1, backgroundColor: colors.BzBg }}
+      onLayout={(e) => setAnchoContenedor(e.nativeEvent.layout.width)}
+    >
       <ScrollView
+        style={{ flex: 1 }}
         keyboardShouldPersistTaps="handled"
-        contentContainerStyle={{ paddingTop: topSeguro, paddingBottom: 32 }}
+        contentContainerStyle={{ paddingTop: topSeguro, paddingBottom: 36 }}
         showsVerticalScrollIndicator={false}
       >
-        {/* 1. BARRA DE BÚSQUEDA + CARRITO */}
+        {/* 1. BARRA DE BÚSQUEDA + CARRITO (mismas dimensiones que topBar de Inicio) */}
         <View style={styles.topBar}>
           <View style={[styles.searchPill, { backgroundColor: colors.BzCard, borderColor: colors.BzBorder }]}>
-            <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
+            <Svg width={15} height={15} viewBox="0 0 24 24" fill="none">
               <Circle cx={11} cy={11} r={7} stroke={colors.BzMuted} strokeWidth={1.8} />
-              <Line x1={16.5} y1={16.5} x2={21} y2={21} stroke={colors.BzMuted} strokeWidth={1.8} strokeLinecap="round" />
+              <Line
+                x1={16.5}
+                y1={16.5}
+                x2={21}
+                y2={21}
+                stroke={colors.BzMuted}
+                strokeWidth={1.8}
+                strokeLinecap="round"
+              />
             </Svg>
             <TextInput
               value={busqueda}
@@ -441,48 +486,57 @@ export function VistaTiendaCliente({
 
           <Pressable
             onPress={() => setCarritoAbierto(true)}
+            hitSlop={6}
             accessibilityRole="button"
-            accessibilityLabel="Ver carrito de compras"
-            style={[
+            accessibilityLabel={
+              totalArticulos > 0 ? `Carrito, ${totalArticulos} artículos` : 'Carrito vacío'
+            }
+            style={({ pressed }) => [
               styles.cartCircle,
               {
-                backgroundColor: totalArticulos > 0 ? colors.BzText : colors.BzCard,
-                borderColor: totalArticulos > 0 ? colors.BzText : colors.BzBorder,
+                backgroundColor: colors.BzCard,
+                borderColor: colors.BzBorder,
+                opacity: pressed ? 0.75 : 1,
               },
             ]}
           >
             <Svg width={19} height={19} viewBox="0 0 24 24" fill="none">
               <Path
                 d="M6 7H18L19 20H5L6 7Z"
-                stroke={totalArticulos > 0 ? colors.BzBg : colors.BzText}
+                stroke={colors.BzText}
                 strokeWidth={1.7}
                 strokeLinejoin="round"
               />
               <Path
                 d="M9 7V5C9 3.34 10.34 2 12 2C13.66 2 15 3.34 15 5V7"
-                stroke={totalArticulos > 0 ? colors.BzBg : colors.BzText}
+                stroke={colors.BzText}
                 strokeWidth={1.7}
                 strokeLinecap="round"
               />
             </Svg>
             {totalArticulos > 0 && (
-              <View style={[styles.cartDot, { backgroundColor: colors.BzSuccess }]}>
-                <Text style={{ color: '#FFFFFF', fontSize: 9, fontWeight: '800' }}>{totalArticulos}</Text>
+              <View
+                pointerEvents="none"
+                style={[styles.cartDot, { backgroundColor: colors.BzDanger, borderColor: colors.BzBg }]}
+              >
+                <Text style={{ color: '#FFFFFF', fontSize: 9, fontWeight: '700' }}>
+                  {totalArticulos > 99 ? '99+' : String(totalArticulos)}
+                </Text>
               </View>
             )}
           </Pressable>
         </View>
 
-        {/* Portada editable por el dueño */}
+        {/* Portada editable por el dueño (misma altura 196 y radio 24 que el banner de Inicio) */}
         {!!imagenPortadaTienda && (
-          <View style={{ paddingHorizontal: 20, marginBottom: 14 }}>
+          <View style={{ paddingHorizontal: MARGEN, marginBottom: 16 }}>
             <Image
               source={{ uri: imagenPortadaTienda }}
               resizeMode="cover"
               style={{
                 width: '100%',
-                height: 130,
-                borderRadius: 16,
+                height: 196,
+                borderRadius: 24,
                 borderWidth: 1,
                 borderColor: colors.BzBorder,
               }}
@@ -578,7 +632,7 @@ export function VistaTiendaCliente({
 
         {/* 3. CATÁLOGO REAL O ESTADO VACÍO */}
         {catalogoReal.length === 0 ? (
-          <View style={{ paddingHorizontal: 20, marginTop: 24 }}>
+          <View style={{ paddingHorizontal: MARGEN, marginTop: 20 }}>
             <View style={[styles.vacioCard, { backgroundColor: colors.BzCard, borderColor: colors.BzBorder }]}>
               <Text style={{ color: colors.BzText, fontSize: 15, fontWeight: '600' }}>
                 Aún no hay productos disponibles
@@ -589,7 +643,7 @@ export function VistaTiendaCliente({
             </View>
           </View>
         ) : mostrandoFiltro ? (
-          <View style={{ paddingHorizontal: 20, marginTop: 8 }}>
+          <View style={{ paddingHorizontal: MARGEN, marginTop: 8 }}>
             <View style={styles.filtroHeader}>
               <View>
                 <Text style={[BzTypography.label, { color: colors.BzMuted }]}>CATÁLOGO FILTRADO</Text>
@@ -620,7 +674,7 @@ export function VistaTiendaCliente({
             ) : (
               <View style={styles.gridMix}>
                 {productosFiltrados.map((prod) =>
-                  renderTarjetaProducto(prod, { width: '48.2%' }),
+                  renderTarjetaProducto(prod, { width: anchoTarjetaGrid }),
                 )}
               </View>
             )}
@@ -641,24 +695,32 @@ export function VistaTiendaCliente({
                 <ScrollView
                   horizontal
                   showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={{ paddingHorizontal: 20, gap: 12 }}
+                  contentContainerStyle={{ paddingHorizontal: MARGEN, gap: GAP }}
                 >
                   {fila.items.map((prod) =>
-                    renderTarjetaProducto(prod, { width: 148 }),
+                    renderTarjetaProducto(prod, { width: 164 }),
                   )}
                 </ScrollView>
               </View>
             ))}
 
-            <View style={{ paddingHorizontal: 20, marginTop: 24 }}>
+            <View style={{ paddingHorizontal: MARGEN, marginTop: 24 }}>
               <Text style={[BzTypography.label, { color: colors.BzMuted }]}>CATÁLOGO COMPLETO</Text>
-              <Text style={{ color: colors.BzText, fontSize: 17, fontWeight: '600', marginTop: 2, marginBottom: 12 }}>
+              <Text
+                style={{
+                  color: colors.BzText,
+                  fontSize: 17,
+                  fontWeight: '600',
+                  marginTop: 2,
+                  marginBottom: 12,
+                }}
+              >
                 Todos los productos ({catalogoReal.length})
               </Text>
 
               <View style={styles.gridMix}>
                 {catalogoReal.map((prod) =>
-                  renderTarjetaProducto(prod, { width: '48.2%' }),
+                  renderTarjetaProducto(prod, { width: anchoTarjetaGrid }),
                 )}
               </View>
             </View>
@@ -691,21 +753,23 @@ export function VistaTiendaCliente({
 export default VistaTiendaCliente;
 
 /* =====================================================================
-   Estilos
+   Estilos (homologados con VistaInicioCliente)
    ===================================================================== */
 
 const styles = StyleSheet.create({
   topBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    paddingHorizontal: 20,
-    marginBottom: 14,
+    justifyContent: 'space-between',
+    gap: GAP,
+    paddingHorizontal: MARGEN,
+    paddingTop: 4,
+    paddingBottom: 14,
   },
   searchPill: {
     flex: 1,
-    height: 46,
-    borderRadius: 23,
+    height: 40,
+    borderRadius: 20,
     borderWidth: 1,
     paddingHorizontal: 14,
     flexDirection: 'row',
@@ -718,26 +782,27 @@ const styles = StyleSheet.create({
     paddingVertical: 0,
   },
   cartCircle: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
   cartDot: {
     position: 'absolute',
-    top: -3,
-    right: -3,
+    top: -4,
+    right: -4,
     minWidth: 18,
     height: 18,
     borderRadius: 9,
-    paddingHorizontal: 4,
+    borderWidth: 2,
+    paddingHorizontal: 3,
     alignItems: 'center',
     justifyContent: 'center',
   },
   bannerApartado: {
-    marginHorizontal: 20,
+    marginHorizontal: MARGEN,
     marginBottom: 12,
     padding: 12,
     borderRadius: 14,
@@ -747,8 +812,8 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   circulosRow: {
-    paddingHorizontal: 20,
-    gap: 12,
+    paddingHorizontal: MARGEN,
+    gap: GAP,
     paddingVertical: 4,
   },
   circuloItem: {
@@ -767,7 +832,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
+    paddingHorizontal: MARGEN,
     marginBottom: 10,
   },
   filtroHeader: {
@@ -785,8 +850,7 @@ const styles = StyleSheet.create({
   gridMix: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    rowGap: 12,
+    gap: GAP,
   },
   prodCard: {
     borderRadius: 18,
@@ -794,7 +858,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   prodVisual: {
-    height: 106,
+    height: 112,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -851,7 +915,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   floatingBarWrap: {
-    paddingHorizontal: 20,
+    paddingHorizontal: MARGEN,
     paddingVertical: 8,
     borderTopWidth: 1,
   },

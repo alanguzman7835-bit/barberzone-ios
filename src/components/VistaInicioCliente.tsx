@@ -1,14 +1,10 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  AccessibilityInfo,
-  Animated,
-  Easing,
   FlatList,
   Image,
   ImageBackground,
   Linking,
   Modal,
-  PanResponder,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -22,13 +18,9 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, {
   Circle,
-  Defs,
-  Ellipse,
   Line,
   Path,
-  RadialGradient,
   Rect,
-  Stop,
 } from 'react-native-svg';
 
 import { useBzTheme } from '../constants/BzTheme';
@@ -292,217 +284,6 @@ function obtenerIniciales(nombre: string): string {
   if (partes.length === 0) return 'BZ';
   if (partes.length === 1) return partes[0].slice(0, 2).toUpperCase();
   return `${partes[0][0]}${partes[1][0]}`.toUpperCase();
-}
-
-/* ---------- Botón flotante del carrito ---------- */
-
-const TAM_BURBUJA = 54;
-const BORDE_BURBUJA = 12;
-
-function BurbujaCarrito({
-  cantidad,
-  onPress,
-  area,
-  topMin,
-}: {
-  cantidad: number;
-  onPress: () => void;
-  area: { w: number; h: number };
-  topMin: number;
-}) {
-  const { colors } = useBzTheme();
-
-  const fondoBurbuja = colors.BzText;
-  const colorBolsa = colors.BzBg;
-
-  const pos = useRef(new Animated.ValueXY()).current;
-  const flota = useRef(new Animated.Value(0)).current;
-  const escala = useRef(new Animated.Value(1)).current;
-
-  const reposo = useRef({ x: 0, y: 0 });
-  const colocada = useRef(false);
-  const [lista, setLista] = useState(false);
-  const vigente = useRef({ area, topMin, onPress });
-  vigente.current = { area, topMin, onPress };
-
-  useEffect(() => {
-    const maxX = area.w - TAM_BURBUJA - BORDE_BURBUJA;
-    const maxY = area.h - TAM_BURBUJA - BORDE_BURBUJA;
-    const previo = colocada.current ? reposo.current : { x: maxX, y: topMin + 14 };
-    const x = Math.max(BORDE_BURBUJA, Math.min(maxX, previo.x));
-    const y = Math.max(topMin, Math.min(maxY, previo.y));
-    colocada.current = true;
-    reposo.current = { x, y };
-    pos.setValue({ x, y });
-    setLista(true);
-  }, [area.w, area.h, topMin, pos]);
-
-  useEffect(() => {
-    let activo = true;
-    let loop: Animated.CompositeAnimation | null = null;
-    AccessibilityInfo.isReduceMotionEnabled().then((reducir) => {
-      if (!activo || reducir) return;
-      loop = Animated.loop(
-        Animated.sequence([
-          Animated.timing(flota, {
-            toValue: 1,
-            duration: 1800,
-            easing: Easing.inOut(Easing.sin),
-            useNativeDriver: true,
-          }),
-          Animated.timing(flota, {
-            toValue: 0,
-            duration: 1800,
-            easing: Easing.inOut(Easing.sin),
-            useNativeDriver: true,
-          }),
-        ]),
-      );
-      loop.start();
-    });
-    return () => {
-      activo = false;
-      loop?.stop();
-    };
-  }, [flota]);
-
-  const pegarse = (x: number, y: number, vx: number, vy: number) => {
-    const { area: a, topMin: t } = vigente.current;
-    const maxX = a.w - TAM_BURBUJA - BORDE_BURBUJA;
-    const maxY = a.h - TAM_BURBUJA - BORDE_BURBUJA;
-    const centro = x + TAM_BURBUJA / 2 + vx * 120;
-    const destX = centro < a.w / 2 ? BORDE_BURBUJA : maxX;
-    const destY = Math.max(t, Math.min(maxY, y + vy * 120));
-    reposo.current = { x: destX, y: destY };
-    Animated.spring(pos, {
-      toValue: { x: destX, y: destY },
-      useNativeDriver: false,
-      friction: 7,
-      tension: 70,
-    }).start();
-  };
-
-  const pan = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onPanResponderGrant: () => {
-        pos.setOffset(reposo.current);
-        pos.setValue({ x: 0, y: 0 });
-        Animated.spring(escala, { toValue: 1.1, friction: 6, useNativeDriver: true }).start();
-      },
-      onPanResponderMove: Animated.event([null, { dx: pos.x, dy: pos.y }], {
-        useNativeDriver: false,
-      }),
-      onPanResponderRelease: (_, g) => {
-        pos.flattenOffset();
-        Animated.spring(escala, { toValue: 1, friction: 6, useNativeDriver: true }).start();
-        if (Math.abs(g.dx) < 6 && Math.abs(g.dy) < 6) {
-          pos.setValue(reposo.current);
-          vigente.current.onPress();
-          return;
-        }
-        pegarse(reposo.current.x + g.dx, reposo.current.y + g.dy, g.vx, g.vy);
-      },
-      onPanResponderTerminate: () => {
-        pos.flattenOffset();
-        Animated.spring(escala, { toValue: 1, friction: 6, useNativeDriver: true }).start();
-        Animated.spring(pos, {
-          toValue: reposo.current,
-          useNativeDriver: false,
-        }).start();
-      },
-    }),
-  ).current;
-
-  const sube = flota.interpolate({ inputRange: [0, 1], outputRange: [0, -3] });
-
-  return (
-    <Animated.View
-      {...pan.panHandlers}
-      accessible
-      accessibilityRole="button"
-      accessibilityLabel={cantidad > 0 ? `Carrito, ${cantidad} artículos` : 'Carrito vacío'}
-      accessibilityHint="Arrástralo para moverlo. Tócalo para abrir el carrito."
-      onAccessibilityTap={onPress}
-      style={[
-        styles.burbujaWrap,
-        { opacity: lista ? 1 : 0, transform: pos.getTranslateTransform() },
-      ]}
-    >
-      <Animated.View
-        style={{
-          width: TAM_BURBUJA,
-          height: TAM_BURBUJA,
-          transform: [{ translateY: sube }, { scale: escala }],
-        }}
-      >
-        <View
-          style={[
-            styles.burbuja,
-            {
-              backgroundColor: fondoBurbuja,
-              borderColor: colors.BzBorder,
-              shadowColor: '#000000',
-            },
-          ]}
-        >
-          <Svg
-            width={TAM_BURBUJA}
-            height={TAM_BURBUJA}
-            viewBox="0 0 54 54"
-            style={StyleSheet.absoluteFill}
-          >
-            <Defs>
-              <RadialGradient id="bzBurbuja" cx="35%" cy="28%" r="80%" fx="35%" fy="28%">
-                <Stop offset="0%" stopColor="#FFFFFF" stopOpacity={0.22} />
-                <Stop offset="60%" stopColor={fondoBurbuja} stopOpacity={0} />
-                <Stop offset="100%" stopColor="#000000" stopOpacity={0.25} />
-              </RadialGradient>
-            </Defs>
-            <Circle cx={27} cy={27} r={27} fill={fondoBurbuja} />
-            <Circle cx={27} cy={27} r={27} fill="url(#bzBurbuja)" />
-            <Circle
-              cx={27}
-              cy={27}
-              r={26.3}
-              fill="none"
-              stroke={colorBolsa}
-              strokeOpacity={0.22}
-              strokeWidth={1.2}
-            />
-            <Ellipse
-              cx={19}
-              cy={14}
-              rx={10}
-              ry={5.5}
-              fill="#FFFFFF"
-              fillOpacity={0.22}
-              transform="rotate(-28 19 14)"
-            />
-            <Ellipse
-              cx={37}
-              cy={42}
-              rx={6}
-              ry={2.4}
-              fill={colorBolsa}
-              fillOpacity={0.14}
-              transform="rotate(-28 37 42)"
-            />
-          </Svg>
-          <Icono nombre="bolsa" size={22} color={colorBolsa} />
-        </View>
-
-        {cantidad > 0 && (
-          <View
-            pointerEvents="none"
-            style={[styles.badge, { backgroundColor: colors.BzDanger, borderColor: colors.BzBg }]}
-          >
-            <Text style={styles.badgeTexto}>{cantidad > 99 ? '99+' : String(cantidad)}</Text>
-          </View>
-        )}
-      </Animated.View>
-    </Animated.View>
-  );
 }
 
 /* ---------- Tarjeta de promoción / categoría ---------- */
@@ -771,10 +552,9 @@ export function VistaInicioCliente({
   espacioInferior = 36,
 }: Props) {
   const { colors } = useBzTheme();
- const { obtenerImagenSeccion, productos: productosDB, slidesHero } = useCatalogoConfig();
+  const { obtenerImagenSeccion, productos: productosDB, slidesHero } = useCatalogoConfig();
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
-  const [area, setArea] = useState<{ w: number; h: number } | null>(null);
   const [menuPerfilVisible, setMenuPerfilVisible] = useState(false);
   const [menuSucursalVisible, setMenuSucursalVisible] = useState(false);
   const [verComprobanteModal, setVerComprobanteModal] = useState(false);
@@ -786,31 +566,28 @@ export function VistaInicioCliente({
   );
 
   // Imágenes editables en tiempo real desde el panel del Dueño
-  const urlHeroCliente = obtenerImagenSeccion('HERO_CLIENTE');
-  const urlPromoBanner = obtenerImagenSeccion('PROMO_BANNER');
   const urlLealtadFondo = obtenerImagenSeccion('LEALTAD_FONDO');
 
   // Carrusel hero sincronizado con las imágenes que el dueño configure
- // 2. En listaPromos:
-const listaPromos = useMemo<PromoItem[]>(() => {
-  if (promociones && promociones.length > 0) return promociones;
-  if (slidesHero && slidesHero.length > 0) {
-    return slidesHero.map((s) => ({
-      id: s.id,
-      titulo: s.titulo,
-      descripcion: '',
-      imagen: s.imagenUrl ? { uri: s.imagenUrl } : BannerBarberZoneImg,
-    }));
-  }
-  return [
-    {
-      id: 'promo-default',
-      titulo: 'Explorar catálogo',
-      descripcion: '',
-      imagen: BannerBarberZoneImg,
-    },
-  ];
-}, [promociones, slidesHero]);
+  const listaPromos = useMemo<PromoItem[]>(() => {
+    if (promociones && promociones.length > 0) return promociones;
+    if (slidesHero && slidesHero.length > 0) {
+      return slidesHero.map((s) => ({
+        id: s.id,
+        titulo: s.titulo,
+        descripcion: '',
+        imagen: s.imagenUrl ? { uri: s.imagenUrl } : BannerBarberZoneImg,
+      }));
+    }
+    return [
+      {
+        id: 'promo-default',
+        titulo: 'Explorar catálogo',
+        descripcion: '',
+        imagen: BannerBarberZoneImg,
+      },
+    ];
+  }, [promociones, slidesHero]);
 
   // Productos reales agregados por el dueño en la base de datos
   const listaProductos = useMemo<ProductoItem[]>(() => {
@@ -880,16 +657,13 @@ const listaPromos = useMemo<PromoItem[]>(() => {
     : citaConfirmada;
 
   return (
-    <View
-      style={{ flex: 1, backgroundColor: colors.BzBg }}
-      onLayout={(e) => setArea({ w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height })}
-    >
+    <View style={{ flex: 1, backgroundColor: colors.BzBg }}>
       <ScrollView
         style={{ flex: 1 }}
         contentContainerStyle={{ paddingTop: topSeguro, paddingBottom: espacioInferior }}
         showsVerticalScrollIndicator={false}
       >
-        {/* 0. Barra superior: Perfil compacto a la izquierda + Selector de sucursal al centro */}
+        {/* 0. Barra superior: Perfil a la izquierda + Sucursal al centro + Carrito fijo a la derecha */}
         <View style={styles.topBar}>
           <Pressable
             onPress={() => setMenuPerfilVisible(true)}
@@ -932,7 +706,34 @@ const listaPromos = useMemo<PromoItem[]>(() => {
             <Icono nombre="chevronDown" size={14} color={colors.BzMuted} />
           </Pressable>
 
-          <View style={styles.topBarSpacer} />
+          <Pressable
+            onPress={onIrCarrito}
+            hitSlop={6}
+            accessibilityRole="button"
+            accessibilityLabel={
+              carritoCount > 0 ? `Carrito, ${carritoCount} artículos` : 'Carrito vacío'
+            }
+            style={({ pressed }) => [
+              styles.perfilCirculo,
+              {
+                borderColor: colors.BzBorder,
+                backgroundColor: colors.BzCard,
+                opacity: pressed ? 0.75 : 1,
+              },
+            ]}
+          >
+            <Icono nombre="bolsa" size={19} color={colors.BzText} />
+            {carritoCount > 0 && (
+              <View
+                pointerEvents="none"
+                style={[styles.badge, { backgroundColor: colors.BzDanger, borderColor: colors.BzBg }]}
+              >
+                <Text style={styles.badgeTexto}>
+                  {carritoCount > 99 ? '99+' : String(carritoCount)}
+                </Text>
+              </View>
+            )}
+          </Pressable>
         </View>
 
         {/* 1. Carrusel hero superior (imágenes/GIFs editables por el dueño) */}
@@ -1223,11 +1024,6 @@ const listaPromos = useMemo<PromoItem[]>(() => {
         </View>
       </ScrollView>
 
-      {/* Burbuja arrastrable: flota sobre toda la pantalla */}
-      {area && (
-        <BurbujaCarrito cantidad={carritoCount} onPress={onIrCarrito} area={area} topMin={topSeguro} />
-      )}
-
       {/* Pestaña inferior (Bottom Sheet) del Perfil */}
       <Modal
         visible={menuPerfilVisible}
@@ -1461,10 +1257,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '500',
   },
-  topBarSpacer: {
-    width: 40,
-    height: 40,
-  },
 
   modalBackdrop: {
     flex: 1,
@@ -1595,39 +1387,19 @@ const styles = StyleSheet.create({
   chipTexto: { fontSize: 11, fontWeight: '600' },
   verTienda: { fontSize: 12, fontWeight: '500' },
 
-  burbujaWrap: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    zIndex: 20,
-    width: TAM_BURBUJA,
-    height: TAM_BURBUJA,
-  },
-  burbuja: {
-    width: TAM_BURBUJA,
-    height: TAM_BURBUJA,
-    borderRadius: TAM_BURBUJA / 2,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowOpacity: 0.28,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 5 },
-    elevation: 10,
-  },
   badge: {
     position: 'absolute',
-    top: -6,
-    right: -6,
-    minWidth: 20,
-    height: 20,
-    borderRadius: 10,
+    top: -4,
+    right: -4,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
     borderWidth: 2,
-    paddingHorizontal: 4,
+    paddingHorizontal: 3,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  badgeTexto: { color: '#FFFFFF', fontSize: 10, fontWeight: '700' },
+  badgeTexto: { color: '#FFFFFF', fontSize: 9, fontWeight: '700' },
 
   puntos: {
     flexDirection: 'row',

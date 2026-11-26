@@ -13,6 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Circle, Path, Rect } from 'react-native-svg';
 import { CampoContrasenaAnimado, CasillasPin, EstadoPin } from '../components/Animaciones';
 import { MainAppShell } from '../components/MenuPrincipal';
+import TransicionVistaBz from '../components/TransicionVistaBz';
 import { AgendaProvider } from '../constants/AgendaContext';
 import { BarberZoneThemeProvider, useBzTheme } from '../constants/BzTheme';
 import {
@@ -643,59 +644,61 @@ function AppRouter() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.BzBg }}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
-        {screen === 'BIENVENIDA' && (
-          <BienvenidaScreen onLogin={() => setScreen('LOGIN')} onCrear={() => setScreen('CREAR_CUENTA')} />
-        )}
-        {screen === 'LOGIN' && (
-          <LoginScreen
-            usuariosDemo={listaUsuariosDemo}
-            onBack={() => setScreen('BIENVENIDA')}
-            onEnter={(u) => {
-              setUsuarioActual(u);
-              setScreen('HOME');
-            }}
-            onPin={() => {
-              if (usuarioPin) setScreen('PIN');
-            }}
-          />
-        )}
-        {screen === 'CREAR_CUENTA' && (
-          <CrearCuentaScreen
-            onBack={() => setScreen('BIENVENIDA')}
-            onCreada={(u) => {
-              setUsuarioActual(u);
-              setScreen('HOME');
-            }}
-          />
-        )}
-        {screen === 'PIN' && usuarioPin && (
-          <PinScreen
-            usuario={usuarioPin}
-            usuariosDisponibles={listaUsuariosDemo.filter((u) => Boolean(u.pin))}
-            onSelectUser={setUsuarioPin}
-            onSuccess={(u) => {
-              setUsuarioActual(u);
-              setScreen('HOME');
-            }}
-            onChangeUser={() => setScreen('LOGIN')}
-          />
-        )}
-        {screen === 'HOME' && usuarioActual && (
-          <LimiteErrores
-            onReset={() => {
-              setUsuarioActual(null);
-              setScreen('BIENVENIDA');
-            }}
-          >
-            <MainAppShell
-              usuario={usuarioActual}
-              onLogout={() => {
+        <TransicionVistaBz vistaKey={screen}>
+          {screen === 'BIENVENIDA' && (
+            <BienvenidaScreen onLogin={() => setScreen('LOGIN')} onCrear={() => setScreen('CREAR_CUENTA')} />
+          )}
+          {screen === 'LOGIN' && (
+            <LoginScreen
+              usuariosDemo={listaUsuariosDemo}
+              onBack={() => setScreen('BIENVENIDA')}
+              onEnter={(u) => {
+                setUsuarioActual(u);
+                setScreen('HOME');
+              }}
+              onPin={() => {
+                if (usuarioPin) setScreen('PIN');
+              }}
+            />
+          )}
+          {screen === 'CREAR_CUENTA' && (
+            <CrearCuentaScreen
+              onBack={() => setScreen('BIENVENIDA')}
+              onCreada={(u) => {
+                setUsuarioActual(u);
+                setScreen('HOME');
+              }}
+            />
+          )}
+          {screen === 'PIN' && usuarioPin && (
+            <PinScreen
+              usuario={usuarioPin}
+              usuariosDisponibles={listaUsuariosDemo.filter((u) => Boolean(u.pin))}
+              onSelectUser={setUsuarioPin}
+              onSuccess={(u) => {
+                setUsuarioActual(u);
+                setScreen('HOME');
+              }}
+              onChangeUser={() => setScreen('LOGIN')}
+            />
+          )}
+          {screen === 'HOME' && usuarioActual && (
+            <LimiteErrores
+              onReset={() => {
                 setUsuarioActual(null);
                 setScreen('BIENVENIDA');
               }}
-            />
-          </LimiteErrores>
-        )}
+            >
+              <MainAppShell
+                usuario={usuarioActual}
+                onLogout={() => {
+                  setUsuarioActual(null);
+                  setScreen('BIENVENIDA');
+                }}
+              />
+            </LimiteErrores>
+          )}
+        </TransicionVistaBz>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );

@@ -1,28 +1,29 @@
 import { useEffect, useState } from 'react';
-import { StatusBar } from 'react-native';
 import { Stack } from 'expo-router';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import * as SystemUI from 'expo-system-ui';
+import { BarberZoneThemeProvider, useBzTheme } from '../constants/BzTheme';
 import { HorariosProvider } from '../constants/HorariosContext';
 import { CatalogoConfigProvider } from '../constants/CatalogoConfigContext';
 import SplashAnimadoBz from '../components/SplashAnimadoBz';
 
-export default function RootLayout() {
+function Raiz() {
+  const { colors } = useBzTheme();
   const [mostrarSplash, setMostrarSplash] = useState(true);
 
+  // La vista nativa de atrás sigue el tema: se acaba la franja negra
   useEffect(() => {
-    SystemUI.setBackgroundColorAsync('#0A0A0A');
-  }, []);
+    SystemUI.setBackgroundColorAsync(colors.BzBg);
+  }, [colors.BzBg]);
 
   return (
-    <SafeAreaProvider style={{ flex: 1, backgroundColor: '#0A0A0A' }}>
-      <StatusBar barStyle="light-content" />
+    <SafeAreaProvider style={{ flex: 1, backgroundColor: colors.BzBg }}>
       <CatalogoConfigProvider>
         <HorariosProvider>
           <Stack
             screenOptions={{
               headerShown: false,
-              contentStyle: { backgroundColor: '#0A0A0A' },
+              contentStyle: { backgroundColor: colors.BzBg },
               autoHideHomeIndicator: true,
             }}
           />
@@ -32,5 +33,13 @@ export default function RootLayout() {
         </HorariosProvider>
       </CatalogoConfigProvider>
     </SafeAreaProvider>
+  );
+}
+
+export default function RootLayout() {
+  return (
+    <BarberZoneThemeProvider>
+      <Raiz />
+    </BarberZoneThemeProvider>
   );
 }

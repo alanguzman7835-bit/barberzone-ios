@@ -2438,7 +2438,7 @@ export const MainAppShell: React.FC<{
     );
   }
 
-  /* ===== EN MÓVIL: BARRA FLOTANTE INFERIOR CON SAFE AREA ===== */
+  /* ===== EN MÓVIL: CONTENIDO DE BORDE A BORDE SIN FRANJA INFERIOR ===== */
   const esOscuro = colors.BzBg.startsWith('#0') || colors.BzBg.startsWith('#1');
 
   return (
@@ -2446,7 +2446,6 @@ export const MainAppShell: React.FC<{
       style={{
         flex: 1,
         backgroundColor: colors.BzBg,
-        paddingTop: Math.max(insets.top, 12),
       }}
     >
       <StatusBar barStyle={esOscuro ? 'light-content' : 'dark-content'} />
@@ -2454,11 +2453,13 @@ export const MainAppShell: React.FC<{
       <View style={{ flex: 1 }}>{renderContenido()}</View>
 
       <View
+        pointerEvents="box-none"
         style={{
-          backgroundColor: colors.BzBg,
-          paddingHorizontal: 10,
-          paddingTop: 8,
-          paddingBottom: Math.max(insets.bottom, 10),
+          position: 'absolute',
+          left: 10,
+          right: 10,
+          bottom: Math.max(insets.bottom, 10),
+          backgroundColor: 'transparent',
           zIndex: 50,
         }}
       >

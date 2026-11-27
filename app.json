@@ -10,7 +10,10 @@
     "backgroundColor": "#0A0A0A",
     "ios": {
       "icon": "./assets/expo.icon",
-      "backgroundColor": "#0A0A0A"
+      "backgroundColor": "#0A0A0A",
+      "infoPlist": {
+        "UIRequiresFullScreen": true
+      }
     },
     "android": {
       "backgroundColor": "#0A0A0A",

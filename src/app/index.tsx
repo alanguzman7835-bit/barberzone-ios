@@ -15,7 +15,7 @@ import { CampoContrasenaAnimado, CasillasPin, EstadoPin } from '../components/An
 import { MainAppShell } from '../components/MenuPrincipal';
 import TransicionVistaBz from '../components/TransicionVistaBz';
 import { AgendaProvider } from '../constants/AgendaContext';
-import { BarberZoneThemeProvider, useBzTheme } from '../constants/BzTheme';
+import {useBzTheme } from '../constants/BzTheme';
 import {
   RepositorioUsuarios,
   RolSesion,
@@ -712,11 +712,9 @@ function AppRouter() {
 
 export default function Index() {
   return (
-    <BarberZoneThemeProvider>
-      <AgendaProvider>
-        <AppRouter />
-      </AgendaProvider>
-    </BarberZoneThemeProvider>
+    <AgendaProvider>
+      <AppRouter />
+    </AgendaProvider>
   );
 }
 

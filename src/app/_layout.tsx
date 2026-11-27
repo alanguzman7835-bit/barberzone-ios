@@ -11,7 +11,7 @@ function Raiz() {
   const { colors } = useBzTheme();
   const [mostrarSplash, setMostrarSplash] = useState(true);
 
-  // La vista nativa de atrás sigue el tema: se acaba la franja negra
+  // Pinta la capa nativa de atrás con el color vivo del tema
   useEffect(() => {
     SystemUI.setBackgroundColorAsync(colors.BzBg);
   }, [colors.BzBg]);

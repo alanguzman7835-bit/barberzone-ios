@@ -23,6 +23,7 @@ export default function RootLayout() {
             screenOptions={{
               headerShown: false,
               contentStyle: { backgroundColor: '#0A0A0A' },
+              autoHideHomeIndicator: true,
             }}
           />
           {mostrarSplash && (

@@ -549,7 +549,7 @@ export function VistaInicioCliente({
   instagramUsuario = '@barberzone.mx',
   preguntas = PREGUNTAS_DEMO,
   aplicarSafeArea = false,
-  espacioInferior = 36,
+  espacioInferior = 110,
 }: Props) {
   const { colors } = useBzTheme();
   const { obtenerImagenSeccion, productos: productosDB, slidesHero } = useCatalogoConfig();

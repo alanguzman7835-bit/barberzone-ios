@@ -109,7 +109,6 @@ export function VistaTiendaCliente({
   const { width: windowWidth } = useWindowDimensions();
   const [anchoContenedor, setAnchoContenedor] = useState(windowWidth);
 
-  // Mismo cálculo de topSeguro que VistaInicioCliente
   const topSeguro = (aplicarSafeArea ? insets.top : 0) + 8;
 
   const [busqueda, setBusqueda] = useState('');
@@ -121,13 +120,11 @@ export function VistaTiendaCliente({
 
   const imagenPortadaTienda = obtenerImagenSeccion('TIENDA_PORTADA');
 
-  // Solo productos reales agregados por el dueño que estén activos
   const catalogoReal = useMemo(
     () => productos.filter((p) => p.activo).map(convertirProductoDB),
     [productos],
   );
 
-  // Columnas adaptables: 2 en móvil, 3 o 4 en pantalla ancha de PC
   const columnas = anchoContenedor >= 900 ? 4 : anchoContenedor >= 620 ? 3 : 2;
   const anchoTarjetaGrid =
     (anchoContenedor - MARGEN * 2 - GAP * (columnas - 1)) / columnas;
@@ -136,7 +133,6 @@ export function VistaTiendaCliente({
   const totalArticulos = useMemo(() => bolsa.reduce((s, l) => s + l.cantidad, 0), [bolsa]);
   const totalPagar = useMemo(() => bolsa.reduce((s, l) => s + l.precio * l.cantidad, 0), [bolsa]);
 
-  // Filas por categoría (solo muestra las categorías que ya tengan productos reales)
   const filasPorCategoria = useMemo(() => {
     return CATEGORIAS_VISUALES.map((cat) => ({
       id: cat.id,
@@ -145,7 +141,6 @@ export function VistaTiendaCliente({
     })).filter((fila) => fila.items.length > 0);
   }, [catalogoReal]);
 
-  // Lista filtrada cuando el usuario escribe en búsqueda o toca un círculo de categoría
   const productosFiltrados = useMemo(() => {
     const q = busqueda.trim().toLowerCase();
     return catalogoReal.filter((p) => {
@@ -382,7 +377,6 @@ export function VistaTiendaCliente({
         </View>
       </Modal>
 
-      {/* Modal con el Ticket oficial de compra/apartado */}
       <Modal
         visible={!!ticketGenerado}
         transparent
@@ -452,10 +446,13 @@ export function VistaTiendaCliente({
       <ScrollView
         style={{ flex: 1 }}
         keyboardShouldPersistTaps="handled"
-        contentContainerStyle={{ paddingTop: topSeguro, paddingBottom: 36 }}
+        contentContainerStyle={{
+          paddingTop: topSeguro,
+          paddingBottom: totalArticulos > 0 ? 165 : 110,
+        }}
         showsVerticalScrollIndicator={false}
       >
-        {/* 1. BARRA DE BÚSQUEDA + CARRITO (mismas dimensiones que topBar de Inicio) */}
+        {/* 1. BARRA DE BÚSQUEDA + CARRITO */}
         <View style={styles.topBar}>
           <View style={[styles.searchPill, { backgroundColor: colors.BzCard, borderColor: colors.BzBorder }]}>
             <Svg width={15} height={15} viewBox="0 0 24 24" fill="none">
@@ -527,7 +524,7 @@ export function VistaTiendaCliente({
           </Pressable>
         </View>
 
-        {/* Portada editable por el dueño (misma altura 196 y radio 24 que el banner de Inicio) */}
+        {/* Portada editable por el dueño */}
         {!!imagenPortadaTienda && (
           <View style={{ paddingHorizontal: MARGEN, marginBottom: 16 }}>
             <Image
@@ -728,9 +725,12 @@ export function VistaTiendaCliente({
         )}
       </ScrollView>
 
-      {/* BARRA FLOTANTE DE CARRITO SI HAY PRODUCTOS */}
+      {/* BARRA FLOTANTE DE CARRITO FLOTANDO ENCIMA DE GooeyNavBar */}
       {totalArticulos > 0 && (
-        <View style={[styles.floatingBarWrap, { backgroundColor: colors.BzBg, borderTopColor: colors.BzBorder }]}>
+        <View
+          pointerEvents="box-none"
+          style={styles.floatingBarWrap}
+        >
           <Pressable
             onPress={() => setCarritoAbierto(true)}
             style={[styles.floatingBarBtn, { backgroundColor: colors.BzText }]}
@@ -915,9 +915,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   floatingBarWrap: {
-    paddingHorizontal: MARGEN,
-    paddingVertical: 8,
-    borderTopWidth: 1,
+    position: 'absolute',
+    left: MARGEN,
+    right: MARGEN,
+    bottom: 92,
+    zIndex: 40,
   },
   floatingBarBtn: {
     height: 46,
@@ -926,6 +928,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.35,
+    shadowRadius: 12,
+    elevation: 6,
   },
   modalOverlay: {
     flex: 1,
